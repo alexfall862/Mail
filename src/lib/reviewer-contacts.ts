@@ -21,9 +21,14 @@ export const STAGE_REVIEWER_CONTACTS: Partial<
 > = {
   legal_review: [
     // 2026 cycle. Examples of the shape — replace with the real contacts:
-    // { name: "Pat Counsel", email: "pat@lawfirm.example", note: "Outside counsel" },
+     { name: "Neil Reiff ", email: "reiff@sandlerreiff.com", note: "Legal" },
     // { name: "Riley Rules", email: "riley@kansasdems.org", note: "Compliance" },
   ],
+  content_review: [
+    // 2026 cycle. Examples of the shape — replace with the real contacts:
+    // { name: "Neil Reiff ", email: "reiff@sandlerreiff.com", note: "Outside counsel" },
+    { name: "Blair Schuman", email: "blair@rogerthatcompliance.com", note: "Compliance" },
+  ]
   // Other stages take entries too, e.g.:
   // final_review: [{ name: "...", email: "...", note: "Compliance" }],
 };
