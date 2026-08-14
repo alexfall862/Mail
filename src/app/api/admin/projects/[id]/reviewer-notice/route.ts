@@ -50,19 +50,29 @@ export async function POST(
     return jsonError(409, "This project is not at a review stage right now.");
   }
 
-  // Whitelist: every configured reviewer plus this ticket's campaign contact.
+  // Whitelist: every configured reviewer plus this ticket's campaign
+  // contact. At campaign review the campaign contact is excluded — the
+  // dedicated sign-off request is the only email to them at that stage, so
+  // they can never be double-emailed.
   const allowed = new Set(
     allReviewerContacts().map((c) => c.email.toLowerCase()),
   );
-  if (project.campaignContactEmail) {
+  if (project.campaignContactEmail && project.status !== "campaign_review") {
     allowed.add(project.campaignContactEmail.toLowerCase());
   }
   const requested = [...new Set(parsed.data.recipients)];
   const invalid = requested.filter((e) => !allowed.has(e.toLowerCase()));
   if (invalid.length > 0) {
+    const isCampaignContact =
+      project.campaignContactEmail &&
+      invalid.some(
+        (e) => e.toLowerCase() === project.campaignContactEmail.toLowerCase(),
+      );
     return jsonError(
       400,
-      "Recipients must come from the configured reviewer rosters or be this project's campaign contact.",
+      isCampaignContact
+        ? "At campaign review, email the campaign contact via the campaign sign-off request instead."
+        : "Recipients must come from the configured reviewer rosters or be this project's campaign contact.",
     );
   }
 

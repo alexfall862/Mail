@@ -26,8 +26,10 @@ export const STAGE_REVIEWER_CONTACTS: Partial<
   ],
   content_review: [
     // 2026 cycle. Examples of the shape — replace with the real contacts:
-    // { name: "Neil Reiff ", email: "reiff@sandlerreiff.com", note: "Outside counsel" },
     { name: "Blair Schuman", email: "blair@rogerthatcompliance.com", note: "Compliance" },
+    { name: "Chair Jeanna Repass", email: "jeanna@kansasdems.org", note: "Party" },
+    { name: "Matthew Brown", email: "matthew@kansasdems.org", note: "Compliance" },
+    { name: "Alex Fall", email: "alex@kansasdems.org", note: "Compliance" },
   ]
   // Other stages take entries too, e.g.:
   // final_review: [{ name: "...", email: "...", note: "Compliance" }],

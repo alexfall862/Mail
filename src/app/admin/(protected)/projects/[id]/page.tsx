@@ -427,7 +427,10 @@ export default async function AdminProjectPage({
 }
 
 /** All configured reviewers plus this ticket's campaign contact, deduped;
- * the current stage's reviewers are the pre-checked defaults. */
+ * the current stage's reviewers are the pre-checked defaults. At campaign
+ * review the campaign contact is deliberately absent: the dedicated
+ * sign-off request is the only way to email them there, so they can't be
+ * emailed twice. */
 function buildNoticeContacts(
   status: ProjectStatus,
   campaignContactName: string,
@@ -442,6 +445,7 @@ function buildNoticeContacts(
   }));
   if (
     campaignContactEmail &&
+    status !== "campaign_review" &&
     !options.some(
       (o) => o.email.toLowerCase() === campaignContactEmail.toLowerCase(),
     )
