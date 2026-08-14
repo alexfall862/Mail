@@ -118,6 +118,10 @@ export const projects = pgTable(
       (): AnyPgColumn => submissionVersions.id,
     ),
     vendorTokenHash: text("vendor_token_hash").notNull(), // sha256(raw magic-link token)
+    // AES-256-GCM(raw token), key derived from env secrets — §12 requires the
+    // magic link in every vendor email, which hash-only storage can't provide
+    // (see DECISIONS.md). Lookups always use the hash.
+    vendorTokenEncrypted: text("vendor_token_encrypted"),
     tokenRotatedAt: timestamp("token_rotated_at", { withTimezone: true }),
 
     createdAt: timestamp("created_at", { withTimezone: true })

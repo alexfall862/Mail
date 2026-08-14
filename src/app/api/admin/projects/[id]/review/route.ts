@@ -1,8 +1,16 @@
 import { NextResponse } from "next/server";
 import { decideReview } from "@/lib/admin-ops";
 import { guardAdminRequest } from "@/lib/admin-api";
+import { projectEmailContext, sendAndLog } from "@/lib/email/send";
+import {
+  vendorApproved,
+  vendorChangesRequested,
+  vendorDenied,
+  vendorStagePassed,
+} from "@/lib/email/templates";
 import { jsonError } from "@/lib/http";
 import { reviewDecisionSchema } from "@/lib/schemas/admin";
+import { STATUS_LABELS } from "@/lib/state-machine";
 
 export async function POST(
   request: Request,
@@ -29,7 +37,39 @@ export async function POST(
   });
   if (!result.ok) return jsonError(result.status, result.message);
 
-  // Phase 7 wires the per-transition vendor emails here (post-commit).
+  // §12 templates 3–6, chosen by the exact transition; sent after commit.
+  const ctx = await projectEmailContext(id);
+  if (ctx) {
+    const { stage, decision, notes, newStatus } = result.value;
+    const stageLabel = STATUS_LABELS[stage];
+    if (ctx.magicLink === null) {
+      console.warn(
+        "Vendor magic link unavailable for project email (token not decryptable); consider regenerating the link.",
+      );
+    }
+    const fallbackLink = ctx.magicLink ?? `${process.env.APP_URL}/`;
+    let content = null;
+    if (decision === "advanced" && newStatus === "approved") {
+      content = vendorApproved(ctx.summary, ctx.magicLink);
+    } else if (decision === "advanced") {
+      content = vendorStagePassed(
+        ctx.summary,
+        stageLabel,
+        STATUS_LABELS[newStatus],
+        ctx.magicLink,
+      );
+    } else if (decision === "changes_requested") {
+      content = vendorChangesRequested(
+        ctx.summary,
+        stageLabel,
+        notes ?? "",
+        fallbackLink,
+      );
+    } else {
+      content = vendorDenied(ctx.summary, notes ?? "", ctx.magicLink);
+    }
+    await sendAndLog(id, ctx.primaries, content);
+  }
 
   return NextResponse.json({ ok: true, newStatus: result.value.newStatus });
 }

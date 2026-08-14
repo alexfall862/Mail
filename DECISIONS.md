@@ -50,6 +50,13 @@ contradiction resolved by the implementer — flagged for explicit review.
 - A superuser can't deactivate their own account.
 - Deny asks for a browser confirm() since it's terminal.
 
+## Phase 7 — Emails
+
+- ⚠ **Added `projects.vendor_token_encrypted`** (nullable, AES-256-GCM, key derived from `R2_SECRET_ACCESS_KEY`+`TURNSTILE_SECRET_KEY`): §12 requires the magic link in every vendor email, including ones sent long after creation, but §7/§4 keep only `sha256(token)` — the link is otherwise unreconstructable. Lookups still use the hash; a DB-only leak still reveals nothing; raw tokens are still never logged. If the derived key ever changes, links vanish from emails until an admin regenerates the link (a console warning notes this).
+- §5 row 10 requires "email admins" on reopen but §12's template list has no reopen template — added an internal `admin_reopened` template (9th) alongside the 8 spec ones.
+- If `RESEND_API_KEY` is unset (local dev), sends are recorded as `email.failed` events with the config error — visible in the project event timeline rather than silently skipped.
+- Emails to vendors go to de-duplicated `is_primary` contact addresses; the events payload records template + recipients + Resend id (never URLs or tokens).
+
 ## Phase 2 — State machine
 
 - After a superuser reopen (approved → final_review), the current version may already hold a final_review decision; re-deciding will upsert that `stage_reviews` row (the `unique (version_id, stage)` constraint stays intact, latest decision wins, and the full history remains in `events`). The spec doesn't address this corner.

@@ -18,6 +18,7 @@ import {
   type ProjectStatus,
   type ReviewStage,
 } from "./state-machine";
+import { encryptVendorToken } from "./token-crypto";
 import { generateVendorToken, hashVendorToken } from "./tokens";
 import { verifyClaimedFile, type UploadKind } from "./uploads";
 import type {
@@ -101,6 +102,7 @@ export async function createProject(
         ...projectValues(input.project),
         status: "submitted",
         vendorTokenHash: token.hash,
+        vendorTokenEncrypted: encryptVendorToken(token.raw),
       });
 
       const [version] = await tx

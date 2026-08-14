@@ -23,6 +23,7 @@ import {
   type ReviewDecision,
   type ReviewStage,
 } from "./state-machine";
+import { encryptVendorToken } from "./token-crypto";
 import { generateVendorToken } from "./tokens";
 
 export type OpResult<T> =
@@ -271,6 +272,7 @@ export async function regenerateLink(input: {
       .update(projects)
       .set({
         vendorTokenHash: token.hash,
+        vendorTokenEncrypted: encryptVendorToken(token.raw),
         tokenRotatedAt: new Date(),
         updatedAt: new Date(),
       })

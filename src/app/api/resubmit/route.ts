@@ -1,4 +1,10 @@
 import { NextResponse } from "next/server";
+import {
+  activeAdminEmails,
+  projectEmailContext,
+  sendAndLog,
+} from "@/lib/email/send";
+import { adminResubmission } from "@/lib/email/templates";
 import { assertSameOrigin, getClientIp, jsonError, rateLimited } from "@/lib/http";
 import { resubmitProject } from "@/lib/projects";
 import { rateLimit } from "@/lib/rate-limit";
@@ -25,7 +31,20 @@ export async function POST(request: Request): Promise<NextResponse> {
   const result = await resubmitProject(parsed.data);
   if (!result.ok) return jsonError(result.status, result.message);
 
-  // Phase 7 wires the admin_resubmission email here (post-commit).
+  // §12 template 7, sent after commit.
+  const ctx = await projectEmailContext(result.value.projectId);
+  if (ctx) {
+    await sendAndLog(
+      result.value.projectId,
+      await activeAdminEmails(),
+      adminResubmission(
+        ctx.summary,
+        result.value.versionNumber,
+        result.value.vendorNote,
+        ctx.adminUrl,
+      ),
+    );
+  }
 
   return NextResponse.json({
     ok: true,

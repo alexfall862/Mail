@@ -1,5 +1,15 @@
 import { NextResponse } from "next/server";
 import { verifyDraftToken } from "@/lib/draft-token";
+import {
+  activeAdminEmails,
+  projectEmailContext,
+  sendAndLog,
+} from "@/lib/email/send";
+import {
+  adminNewSubmission,
+  vendorConfirmation,
+} from "@/lib/email/templates";
+import { vendorLinkUrl } from "@/lib/tokens";
 import { assertSameOrigin, getClientIp, jsonError, rateLimited } from "@/lib/http";
 import { createProject } from "@/lib/projects";
 import { rateLimit } from "@/lib/rate-limit";
@@ -36,8 +46,21 @@ export async function POST(request: Request): Promise<NextResponse> {
   const result = await createProject(parsed.data, projectId);
   if (!result.ok) return jsonError(result.status, result.message);
 
-  // Phase 7 wires emails here (post-commit): vendor_confirmation with the
-  // magic link + admin_new_submission.
+  // §12 templates 1–2, sent after commit; failures are logged, never thrown.
+  const ctx = await projectEmailContext(projectId);
+  if (ctx) {
+    const magicLink = vendorLinkUrl(result.value.rawVendorToken);
+    await sendAndLog(
+      projectId,
+      ctx.primaries,
+      vendorConfirmation(ctx.summary, magicLink),
+    );
+    await sendAndLog(
+      projectId,
+      await activeAdminEmails(),
+      adminNewSubmission(ctx.summary, ctx.adminUrl),
+    );
+  }
 
   return NextResponse.json({ ok: true });
 }

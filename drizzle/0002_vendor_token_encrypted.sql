@@ -1,0 +1,1 @@
+ALTER TABLE "projects" ADD COLUMN "vendor_token_encrypted" text;

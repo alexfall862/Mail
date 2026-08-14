@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { reopenProject } from "@/lib/admin-ops";
 import { guardAdminRequest } from "@/lib/admin-api";
+import { activeAdminEmails, projectEmailContext, sendAndLog } from "@/lib/email/send";
+import { adminReopened } from "@/lib/email/templates";
 import { jsonError } from "@/lib/http";
 import { reopenSchema } from "@/lib/schemas/admin";
 
@@ -26,7 +28,20 @@ export async function POST(
   });
   if (!result.ok) return jsonError(result.status, result.message);
 
-  // Phase 7 wires the admin notification email here (post-commit).
+  // §5 row 10: email admins (sent after commit).
+  const ctx = await projectEmailContext(id);
+  if (ctx) {
+    await sendAndLog(
+      id,
+      await activeAdminEmails(),
+      adminReopened(
+        ctx.summary,
+        result.value.reason,
+        guard.session.admin.name,
+        ctx.adminUrl,
+      ),
+    );
+  }
 
   return NextResponse.json({ ok: true, newStatus: result.value.newStatus });
 }

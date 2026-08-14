@@ -15,6 +15,13 @@
       "when": 1786725700380,
       "tag": "0001_events_project_id_nullable",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1786728668857,
+      "tag": "0002_vendor_token_encrypted",
+      "breakpoints": true
     }
   ]
 }
