@@ -96,9 +96,12 @@ function EmailOptionsFields({
 export function ReviewPanel({
   projectId,
   stage,
+  primaryContacts,
 }: {
   projectId: string;
   stage: ReviewStage;
+  /** The is_primary contacts the decision email goes to. */
+  primaryContacts: Array<{ name: string; org: string; email: string }>;
 }) {
   const router = useRouter();
   const items = STAGE_CHECKLISTS[stage];
@@ -203,6 +206,19 @@ export function ReviewPanel({
           />
           Email the vendor&apos;s primary contacts about this decision
         </label>
+        {primaryContacts.length > 0 ? (
+          <ul className="ml-6 space-y-0.5 text-xs text-gray-600">
+            {primaryContacts.map((c) => (
+              <li key={c.email}>
+                {c.name} ({c.org}) · {c.email}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="ml-6 text-xs text-red-700">
+            No contact on this project is marked to receive status emails.
+          </p>
+        )}
         {notifyVendor ? (
           <EmailOptionsFields
             label="Vendor email: CC options"

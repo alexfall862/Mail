@@ -233,7 +233,17 @@ export default async function AdminProjectPage({
             email your notes to the vendor.
           </p>
           <div className="mt-4">
-            <ReviewPanel projectId={project.id} stage={status} />
+            <ReviewPanel
+              projectId={project.id}
+              stage={status}
+              primaryContacts={contacts
+                .filter((c) => c.isPrimary)
+                .map((c) => ({
+                  name: c.contactName,
+                  org: c.orgName,
+                  email: c.email,
+                }))}
+            />
           </div>
         </section>
       )}
