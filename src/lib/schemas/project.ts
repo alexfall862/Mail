@@ -39,7 +39,13 @@ export const DISTRICT_REQUIRED_OFFICES: readonly Office[] = [
   "other",
 ];
 
-export const DISTRICT_DETAIL_LABEL = "District / County / Specify office";
+export const DISTRICT_DETAIL_LABEL = "District";
+
+export const DISTRICT_TOOLTIP =
+  'What to enter: statewide races use "Statewide". State Board of Education, ' +
+  "State Senate, and State House use the district number. County Party uses " +
+  "the county name. For municipal or other offices, describe the district, " +
+  "county, or office.";
 
 export const VENDOR_ROLES = [
   { value: "designer_consultant", label: "Designer / Consultant" },
@@ -59,6 +65,22 @@ export function vendorRoleLabel(value: VendorRole): string {
 /** Kansas's timezone anchors "today" for the mail-date rule. */
 export function todayInKansas(): string {
   return new Date().toLocaleDateString("en-CA", { timeZone: "America/Chicago" });
+}
+
+/**
+ * Earliest allowed mail date: two full business days (Mon-Fri, holidays not
+ * counted) after today. E.g. Monday → Wednesday, Friday → Tuesday.
+ */
+export function minMailDate(today: string = todayInKansas()): string {
+  const [y, m, d] = today.split("-").map(Number);
+  const date = new Date(Date.UTC(y!, m! - 1, d!));
+  let businessDays = 0;
+  while (businessDays < 2) {
+    date.setUTCDate(date.getUTCDate() + 1);
+    const dow = date.getUTCDay();
+    if (dow !== 0 && dow !== 6) businessDays++;
+  }
+  return date.toISOString().slice(0, 10);
 }
 
 const baseProjectFields = z.object({
@@ -111,11 +133,11 @@ function refineProjectFields(
       message: `${DISTRICT_DETAIL_LABEL} is required for this office.`,
     });
   }
-  if (data.mailDate < todayInKansas()) {
+  if (data.mailDate < minMailDate()) {
     ctx.addIssue({
       code: "custom",
       path: ["mailDate"],
-      message: "Mail date must be today or later.",
+      message: "Mail date must be at least two full business days from today.",
     });
   }
 }

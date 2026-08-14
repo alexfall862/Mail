@@ -16,10 +16,13 @@ import {
   type ProcessedImage,
 } from "@/lib/client/artwork";
 import { putToR2, requestPresign, UploadError } from "@/lib/client/upload";
+import { districtOptionsFor } from "@/lib/district-options";
 import {
   contactsSchema,
   DISTRICT_DETAIL_LABEL,
   DISTRICT_REQUIRED_OFFICES,
+  DISTRICT_TOOLTIP,
+  minMailDate,
   OFFICES,
   projectFieldsSchema,
   resubmitProjectFieldsSchema,
@@ -132,6 +135,24 @@ export function ProjectForm(props: ProjectFormProps) {
   function setField<K extends keyof typeof fields>(key: K, value: string) {
     setFields((f) => ({ ...f, [key]: value }));
   }
+
+  // Selecting an office suggests the district (e.g. "Statewide") without
+  // clobbering anything the vendor typed themselves.
+  function handleOfficeChange(value: string) {
+    setFields((f) => {
+      const previous = districtOptionsFor(f.office);
+      const next = districtOptionsFor(value as Office);
+      const untouched =
+        f.districtDetail.trim() === "" || f.districtDetail === previous.prefill;
+      return {
+        ...f,
+        office: value as Office | "",
+        districtDetail: untouched ? (next.prefill ?? "") : f.districtDetail,
+      };
+    });
+  }
+
+  const districtSuggestions = districtOptionsFor(fields.office).options;
 
   function updateContact(role: VendorRole, patch: Partial<ContactState>) {
     setContacts((cs) => cs.map((c) => (c.role === role ? { ...c, ...patch } : c)));
@@ -425,7 +446,7 @@ export function ProjectForm(props: ProjectFormProps) {
               id="office"
               className={inputCls}
               value={fields.office}
-              onChange={(e) => setField("office", e.target.value)}
+              onChange={(e) => handleOfficeChange(e.target.value)}
             >
               <option value="">Select…</option>
               {OFFICES.map((o) => (
@@ -437,14 +458,27 @@ export function ProjectForm(props: ProjectFormProps) {
           </div>
           <div>
             <label htmlFor="district" className={labelCls}>
-              {DISTRICT_DETAIL_LABEL} {officeNeedsDistrict ? "*" : ""}
+              {DISTRICT_DETAIL_LABEL} {officeNeedsDistrict ? "*" : ""}{" "}
+              <span
+                title={DISTRICT_TOOLTIP}
+                aria-label={DISTRICT_TOOLTIP}
+                className="ml-1 inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full bg-gray-300 text-[10px] font-bold text-white"
+              >
+                ?
+              </span>
             </label>
             <input
               id="district"
+              list="district-suggestions"
               className={inputCls}
               value={fields.districtDetail}
               onChange={(e) => setField("districtDetail", e.target.value)}
             />
+            <datalist id="district-suggestions">
+              {districtSuggestions.map((option) => (
+                <option key={option} value={option} />
+              ))}
+            </datalist>
           </div>
           <div>
             <label htmlFor="pieces" className={labelCls}>
@@ -508,10 +542,14 @@ export function ProjectForm(props: ProjectFormProps) {
             <input
               id="maildate"
               type="date"
+              min={minMailDate()}
               className={inputCls}
               value={fields.mailDate}
               onChange={(e) => setField("mailDate", e.target.value)}
             />
+            <p className="mt-1 text-xs text-gray-500">
+              Must be at least two full business days from today.
+            </p>
           </div>
         </div>
       </section>
