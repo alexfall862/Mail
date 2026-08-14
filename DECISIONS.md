@@ -25,6 +25,22 @@ contradiction resolved by the implementer — flagged for explicit review.
 - Middleware redirects unauthenticated `/admin` requests by cookie presence; every admin page/API additionally does full DB session validation (`requireAdmin`) — the middleware is UX, the DB check is the security boundary.
 - Forced password change is enforced in the protected admin layout (redirect to `/admin/settings/password` until cleared); the password page lives in a sibling route group so it's reachable while forced.
 
+## Phase 4 — Upload pipeline
+
+- Turnstile tokens are single-use, so the public flow verifies Turnstile once at the first presign; the HMAC-signed draft project-id token it returns then authenticates the rest of that form session (later presigns + final submit). Bots can't reach submit without a Turnstile pass.
+- Draft-token HMAC key is derived (sha256) from `R2_SECRET_ACCESS_KEY` + `TURNSTILE_SECRET_KEY` — §14 defines no separate app secret and its list is fixed. Tokens expire after 24 h; rotating either secret invalidates in-flight drafts (acceptable).
+- Artwork at rest is always the client pipeline's JPEG, so presign only allows `image/jpeg` for artwork kinds (inputs may be JPEG/PNG/WebP/PDF, but those are consumed in-browser).
+- Resubmission presigns require status `changes_requested` and only sign keys under the *next* version's prefix — existing objects can never be overwritten via presign.
+
+## Phase 5 — Vendor surface
+
+- "Today" for the mail-date rule is computed in America/Chicago; the rule also applies on resubmission (a stale past mail date must be updated to resubmit).
+- Contacts are editable on resubmission (per §5's "contacts" in the routing rule); admin payment data (`paid_at`, `paid_marked_by`) is preserved for roles that remain, removed roles are deleted, new roles added.
+- `version.submitted` is logged for v1 as well as resubmissions; the v1 flow also logs `project.created`, per-file `file.uploaded`, and the automatic `status.changed`.
+- The submission response body contains no magic link (it's emailed only); `/submit/success` says so. `/p/{token}` pages send `robots: noindex`.
+- Combined-mode "keep current artwork" on resubmit carries forward whatever artwork kinds the current version holds (an auto-split PDF's front/back carry as front/back).
+- Vendor status page also links nothing for invoices (spec lists artwork thumbnails only); invoice presence is visible in version history filenames only via the resubmit form's "keep current file" hints.
+
 ## Phase 2 — State machine
 
 - After a superuser reopen (approved → final_review), the current version may already hold a final_review decision; re-deciding will upsert that `stage_reviews` row (the `unique (version_id, stage)` constraint stays intact, latest decision wins, and the full history remains in `events`). The spec doesn't address this corner.
