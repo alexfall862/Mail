@@ -16,20 +16,35 @@ export function rateLimited(result: RateLimitResult): NextResponse {
 
 /**
  * Same-origin check for state-changing endpoints (SPEC §13). Browsers always
- * send Origin on cross-site POSTs; we reject anything that doesn't match
- * APP_URL. Requests without an Origin header (curl, same-origin GET) pass —
- * cookie/token auth is the actual credential; this only blunts CSRF.
+ * send Origin on cross-site POSTs; we accept an Origin that matches either
+ * APP_URL or the host this request actually arrived at (proxy-aware via
+ * x-forwarded-host) — so localhost vs 127.0.0.1 both work in dev. Requests
+ * without an Origin header (curl, same-origin GET) pass — cookie/token auth
+ * is the actual credential; this only blunts CSRF.
  */
 export function isSameOrigin(request: Request): boolean {
   const origin = request.headers.get("origin");
   if (!origin) return true;
-  const appUrl = process.env.APP_URL;
-  if (!appUrl) return false;
+
+  let originUrl: URL;
   try {
-    return new URL(origin).origin === new URL(appUrl).origin;
+    originUrl = new URL(origin);
   } catch {
     return false;
   }
+
+  const appUrl = process.env.APP_URL;
+  if (appUrl) {
+    try {
+      if (originUrl.origin === new URL(appUrl).origin) return true;
+    } catch {
+      // fall through to the host comparison
+    }
+  }
+
+  const requestHost =
+    request.headers.get("x-forwarded-host") ?? request.headers.get("host");
+  return requestHost !== null && originUrl.host === requestHost;
 }
 
 export function assertSameOrigin(request: Request): NextResponse | null {
