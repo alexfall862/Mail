@@ -69,6 +69,12 @@ describe("email templates (§12)", () => {
     }
   });
 
+  it("every subject starts with the [KDP Mail] filter prefix", () => {
+    for (const t of [...vendorTemplates(), ...adminTemplates()]) {
+      expect(t.subject.startsWith("[KDP Mail] "), t.template).toBe(true);
+    }
+  });
+
   it("every vendor email carries the magic link in html and text", () => {
     for (const t of vendorTemplates()) {
       expect(t.html, t.template).toContain(MAGIC);

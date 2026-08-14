@@ -59,15 +59,22 @@ function pieceLine(p: ProjectSummary): string {
   return `${p.candidateSupported} (${p.officeLabel}), mailing ${p.mailDateFormatted}`;
 }
 
+/** Every subject gets this prefix so recipients can filter/search "[KDP Mail]". */
+export const SUBJECT_PREFIX = "[KDP Mail]";
+
+function subj(subject: string): string {
+  return `${SUBJECT_PREFIX} ${subject}`;
+}
+
 /* ------------------------------------------------------------------ 1 */
 export function vendorConfirmation(
   p: ProjectSummary,
   magicLink: string,
 ): EmailContent {
-  const subject = `Submission received: ${p.candidateSupported}`;
+  const subject = subj(`Submission received: ${p.candidateSupported}`);
   const bodyHtml =
     `<p style="${styles.p}">Thanks. We received your mail piece submission for <strong>${esc(pieceLine(p))}</strong>.</p>` +
-    `<p style="${styles.p}">It now goes through three review steps: content review, legal review, and final review. You'll get an email at each step, and if anything needs to change we'll send you the reviewer's notes with instructions to resubmit.</p>` +
+    `<p style="${styles.p}">It now goes through four review steps: content review, campaign review, legal review, and final review. You'll get an email at each step, and if anything needs to change we'll send you the reviewer's notes with instructions to resubmit.</p>` +
     `<p style="${styles.p}"><a href="${esc(magicLink)}" style="${styles.button}">View your project status</a></p>` +
     `<p style="${styles.p}"><strong>Bookmark that link.</strong> It's your private page for this project. No account or password needed.</p>`;
   const text =
@@ -89,7 +96,7 @@ export function adminNewSubmission(
   p: ProjectSummary,
   adminUrl: string,
 ): EmailContent {
-  const subject = `New mail submission: ${p.candidateSupported} (mails ${p.mailDateFormatted})`;
+  const subject = subj(`New mail submission: ${p.candidateSupported} (mails ${p.mailDateFormatted})`);
   const bodyHtml =
     `<p style="${styles.p}">A new mail piece was submitted:</p>` +
     `<p style="${styles.p}"><strong>${esc(p.candidateSupported)}</strong><br/>${esc(p.officeLabel)}<br/>Mail date: ${esc(p.mailDateFormatted)}</p>` +
@@ -112,7 +119,7 @@ export function vendorStagePassed(
   nextStageLabel: string,
   magicLink: string | null,
 ): EmailContent {
-  const subject = `${p.candidateSupported}: passed ${stageLabel.toLowerCase()}`;
+  const subject = subj(`${p.candidateSupported}: passed ${stageLabel.toLowerCase()}`);
   const bodyHtml =
     `<p style="${styles.p}">Good news. Your mail piece for <strong>${esc(pieceLine(p))}</strong> passed <strong>${esc(stageLabel.toLowerCase())}</strong>.</p>` +
     `<p style="${styles.p}">It has moved on to ${esc(nextStageLabel.toLowerCase())}. No action is needed from you right now.</p>`;
@@ -135,7 +142,7 @@ export function vendorChangesRequested(
   notes: string,
   magicLink: string,
 ): EmailContent {
-  const subject = `${p.candidateSupported}: changes requested`;
+  const subject = subj(`${p.candidateSupported}: changes requested`);
   const bodyHtml =
     `<p style="${styles.p}">The reviewer at <strong>${esc(stageLabel.toLowerCase())}</strong> requested changes to your mail piece for <strong>${esc(pieceLine(p))}</strong>:</p>` +
     `<p style="${styles.notes}">${esc(notes)}</p>` +
@@ -159,7 +166,7 @@ export function vendorApproved(
   p: ProjectSummary,
   magicLink: string | null,
 ): EmailContent {
-  const subject = `${p.candidateSupported}: approved, cleared to print`;
+  const subject = subj(`${p.candidateSupported}: approved, cleared to print`);
   const bodyHtml =
     `<p style="${styles.p}">Your mail piece for <strong>${esc(pieceLine(p))}</strong> has completed all reviews and is <strong>approved. You are cleared to print and mail.</strong></p>` +
     `<p style="${styles.p}">Keep this email for your records. If anything about the piece changes before it mails, contact KDP before printing.</p>`;
@@ -181,7 +188,7 @@ export function vendorDenied(
   reason: string,
   magicLink: string | null,
 ): EmailContent {
-  const subject = `${p.candidateSupported}: submission denied`;
+  const subject = subj(`${p.candidateSupported}: submission denied`);
   const bodyHtml =
     `<p style="${styles.p}">We're sorry. Your mail piece for <strong>${esc(pieceLine(p))}</strong> was denied. The reviewer's reason:</p>` +
     `<p style="${styles.notes}">${esc(reason)}</p>` +
@@ -206,7 +213,7 @@ export function adminResubmission(
   vendorNote: string | null,
   adminUrl: string,
 ): EmailContent {
-  const subject = `Resubmitted (v${versionNumber}): ${p.candidateSupported}`;
+  const subject = subj(`Resubmitted (v${versionNumber}): ${p.candidateSupported}`);
   const noteHtml = vendorNote
     ? `<p style="${styles.p}">Vendor note:</p><p style="${styles.notes}">${esc(vendorNote)}</p>`
     : `<p style="${styles.p}">The vendor didn't include a note.</p>`;
@@ -231,7 +238,7 @@ export function vendorLinkRegenerated(
   p: ProjectSummary,
   magicLink: string,
 ): EmailContent {
-  const subject = `${p.candidateSupported}: your status link was replaced`;
+  const subject = subj(`${p.candidateSupported}: your status link was replaced`);
   const bodyHtml =
     `<p style="${styles.p}">KDP generated a new private status link for your mail piece <strong>${esc(pieceLine(p))}</strong>. The old link no longer works.</p>` +
     `<p style="${styles.p}"><a href="${esc(magicLink)}" style="${styles.button}">Open your new status link</a></p>` +
@@ -255,7 +262,7 @@ export function adminReopened(
   reopenedBy: string,
   adminUrl: string,
 ): EmailContent {
-  const subject = `Reopened: ${p.candidateSupported}`;
+  const subject = subj(`Reopened: ${p.candidateSupported}`);
   const bodyHtml =
     `<p style="${styles.p}"><strong>${esc(reopenedBy)}</strong> reopened <strong>${esc(pieceLine(p))}</strong>. It's back in final review.</p>` +
     `<p style="${styles.p}">Reason:</p><p style="${styles.notes}">${esc(reason)}</p>` +
