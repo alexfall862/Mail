@@ -16,6 +16,15 @@ contradiction resolved by the implementer — flagged for explicit review.
 - Money columns (`total_cost_cents`, `size_bytes`) use JS `number` mode (safe well past any realistic value).
 - Local dev Postgres: `postgres:16` on port 5432, db `kdp_mail`, creds postgres/postgres.
 
+## Phase 3 — Auth
+
+- ⚠ **`events.project_id` made nullable** (§4 says NOT NULL): the required minimum event set includes `admin.login`, `admin.created`, `admin.deactivated`, which have no project to reference. Project-scoped events always set it; the §4 indexes are unchanged.
+- Session cookie is named `kdp_session`; fixed 30-day expiry (no sliding renewal — spec says "30-day expiry").
+- Emails are normalized lowercase/trimmed for admin lookup; login verifies against a dummy argon2 hash when the email is unknown so response timing doesn't reveal account existence.
+- Changing one's own password deletes the admin's *other* sessions (current one stays); spec is silent.
+- Middleware redirects unauthenticated `/admin` requests by cookie presence; every admin page/API additionally does full DB session validation (`requireAdmin`) — the middleware is UX, the DB check is the security boundary.
+- Forced password change is enforced in the protected admin layout (redirect to `/admin/settings/password` until cleared); the password page lives in a sibling route group so it's reachable while forced.
+
 ## Phase 2 — State machine
 
 - After a superuser reopen (approved → final_review), the current version may already hold a final_review decision; re-deciding will upsert that `stage_reviews` row (the `unique (version_id, stage)` constraint stays intact, latest decision wins, and the full history remains in `events`). The spec doesn't address this corner.

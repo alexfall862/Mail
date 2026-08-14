@@ -239,9 +239,11 @@ export const events = pgTable(
     id: bigint("id", { mode: "number" })
       .primaryKey()
       .generatedAlwaysAsIdentity(),
-    projectId: uuid("project_id")
-      .notNull()
-      .references(() => projects.id, { onDelete: "cascade" }),
+    // §4 declares NOT NULL, but the required admin.login / admin.created /
+    // admin.deactivated events have no project — nullable (see DECISIONS.md).
+    projectId: uuid("project_id").references(() => projects.id, {
+      onDelete: "cascade",
+    }),
     actor: actorType("actor").notNull(),
     actorId: uuid("actor_id"), // admin id or null
     eventType: text("event_type").notNull(),
