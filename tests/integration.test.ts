@@ -1,0 +1,557 @@
+/**
+ * DB-backed integration tests (require the docker-compose Postgres from
+ * README to be running). R2 is mocked — object storage interactions are
+ * covered by the live smoke test in SETUP_CHECKLIST §5.
+ *
+ * Covers: atomic creation with auto-advance, the full review lifecycle, both
+ * routing-rule branches with carry-forward, one-decision-per-stage, the
+ * concurrent-click row-lock case, reopen + re-decide, tombstoned deletion,
+ * and CSV building.
+ */
+import "dotenv/config";
+import { randomUUID } from "node:crypto";
+import { eq } from "drizzle-orm";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+
+vi.mock("@/lib/r2", () => {
+  const store = new Map<string, { sizeBytes: number; contentType: string }>();
+  return {
+    PRESIGN_EXPIRY_SECONDS: 600,
+    __store: store,
+    presignPut: vi.fn(async () => "https://r2.test/put"),
+    presignGet: vi.fn(async () => "https://r2.test/get"),
+    headObject: vi.fn(async (key: string) => {
+      const obj = store.get(key);
+      return obj
+        ? { exists: true, sizeBytes: obj.sizeBytes, contentType: obj.contentType }
+        : { exists: false };
+    }),
+    deleteProjectPrefix: vi.fn(async (projectId: string) => {
+      let deleted = 0;
+      for (const key of [...store.keys()]) {
+        if (key.startsWith(`projects/${projectId}/`)) {
+          store.delete(key);
+          deleted++;
+        }
+      }
+      return { deleted, verifiedEmpty: true };
+    }),
+  };
+});
+
+import { db } from "@/db";
+import {
+  admins,
+  contacts,
+  deletedProjects,
+  events,
+  files,
+  projects,
+  stageReviews,
+  submissionVersions,
+} from "@/db/schema";
+import {
+  decideReview,
+  deleteProject,
+  getDashboardRows,
+  regenerateLink,
+  reopenProject,
+  setContactPaid,
+} from "@/lib/admin-ops";
+import { createProject, resubmitProject } from "@/lib/projects";
+import * as r2 from "@/lib/r2";
+import type { FileClaim, SubmitRequest } from "@/lib/schemas/project";
+import { hashVendorToken } from "@/lib/tokens";
+
+const r2store = (r2 as unknown as { __store: Map<string, { sizeBytes: number; contentType: string }> }).__store;
+
+let adminId: string;
+let superuserId: string;
+const createdProjectIds: string[] = [];
+
+function seedR2Object(key: string, sizeBytes: number, contentType: string) {
+  r2store.set(key, { sizeBytes, contentType });
+}
+
+function claim(
+  projectId: string,
+  version: number,
+  kind: FileClaim["kind"],
+  contentType = "image/jpeg",
+): FileClaim {
+  const ext = contentType === "application/pdf" ? "pdf" : "jpg";
+  const key = `projects/${projectId}/v${version}/${kind}.${ext}`;
+  seedR2Object(key, 1234, contentType);
+  return {
+    kind,
+    r2Key: key,
+    originalFilename: `${kind}.${ext}`,
+    contentType,
+    sizeBytes: 1234,
+    widthPx: kind === "invoice" ? undefined : 2500,
+    heightPx: kind === "invoice" ? undefined : 1600,
+  };
+}
+
+function baseSubmit(projectId: string): SubmitRequest {
+  return {
+    draftToken: "unused-in-direct-call",
+    project: {
+      candidateSupported: "Test Candidate",
+      description: "A test mail piece",
+      office: "state_house",
+      districtDetail: "District 42",
+      pieceCount: 5000,
+      totalCostCents: 123456,
+      postOfficeLocation: "Topeka, KS",
+      permitNumber: "PERMIT-1",
+      mailDate: "2030-01-15",
+    },
+    contacts: [
+      {
+        role: "print_shop",
+        orgName: "Print Co",
+        contactName: "Pat Printer",
+        email: "pat@print.example",
+        paidByKdp: true,
+        isPrimary: true,
+      },
+      {
+        role: "mail_house",
+        orgName: "Mail Co",
+        contactName: "Morgan Mailer",
+        email: "morgan@mail.example",
+        paidByKdp: false,
+        isPrimary: false,
+      },
+    ],
+    files: [
+      claim(projectId, 1, "artwork_front"),
+      claim(projectId, 1, "artwork_back"),
+      claim(projectId, 1, "invoice", "application/pdf"),
+    ],
+  };
+}
+
+async function makeProject(): Promise<{ projectId: string; rawToken: string }> {
+  const projectId = randomUUID();
+  const result = await createProject(baseSubmit(projectId), projectId);
+  if (!result.ok) throw new Error(`createProject failed: ${result.message}`);
+  createdProjectIds.push(projectId);
+  return { projectId, rawToken: result.value.rawVendorToken };
+}
+
+function resubmitPayload(
+  rawToken: string,
+  projectId: string,
+  version: number,
+  opts: {
+    uploads?: FileClaim[];
+    carry?: FileClaim["kind"][];
+    note?: string;
+    pieceCount?: number;
+  } = {},
+) {
+  const base = baseSubmit(projectId);
+  return {
+    vendorToken: rawToken,
+    project: { ...base.project, pieceCount: opts.pieceCount ?? base.project.pieceCount },
+    contacts: base.contacts,
+    uploads: opts.uploads ?? [],
+    carryForwardKinds: opts.carry ?? [],
+    vendorNote: opts.note,
+  };
+}
+
+beforeAll(async () => {
+  const [a] = await db
+    .insert(admins)
+    .values({
+      email: `test-admin-${randomUUID()}@test.example`,
+      name: "Test Admin",
+      passwordHash: "x",
+      isSuperuser: false,
+      mustChangePassword: false,
+    })
+    .returning({ id: admins.id });
+  const [s] = await db
+    .insert(admins)
+    .values({
+      email: `test-super-${randomUUID()}@test.example`,
+      name: "Test Superuser",
+      passwordHash: "x",
+      isSuperuser: true,
+      mustChangePassword: false,
+    })
+    .returning({ id: admins.id });
+  adminId = a!.id;
+  superuserId = s!.id;
+});
+
+afterAll(async () => {
+  for (const id of createdProjectIds) {
+    await db.delete(projects).where(eq(projects.id, id));
+    await db.delete(deletedProjects).where(eq(deletedProjects.id, id));
+  }
+  await db.delete(events).where(eq(events.actorId, adminId));
+  await db.delete(events).where(eq(events.actorId, superuserId));
+  await db.delete(admins).where(eq(admins.id, adminId));
+  await db.delete(admins).where(eq(admins.id, superuserId));
+  const { pool } = (await import("@/db")) as unknown as { pool?: { end: () => Promise<void> } };
+  await pool?.end?.();
+});
+
+describe("creation (§5 rows 1–2)", () => {
+  it("creates project + v1 + files atomically and auto-advances to content_review", async () => {
+    const { projectId } = await makeProject();
+    const [project] = await db.select().from(projects).where(eq(projects.id, projectId));
+    expect(project!.status).toBe("content_review");
+    expect(project!.currentVersionId).not.toBeNull();
+
+    const versions = await db
+      .select()
+      .from(submissionVersions)
+      .where(eq(submissionVersions.projectId, projectId));
+    expect(versions).toHaveLength(1);
+    const fileRows = await db.select().from(files).where(eq(files.projectId, projectId));
+    expect(fileRows.map((f) => f.kind).sort()).toEqual([
+      "artwork_back",
+      "artwork_front",
+      "invoice",
+    ]);
+
+    const eventRows = await db.select().from(events).where(eq(events.projectId, projectId));
+    const types = eventRows.map((e) => e.eventType);
+    expect(types).toContain("project.created");
+    expect(types).toContain("version.submitted");
+    expect(types).toContain("status.changed");
+    expect(types.filter((t) => t === "file.uploaded")).toHaveLength(3);
+  });
+
+  it("rejects a v1 with an invalid file set (partial separate)", async () => {
+    const projectId = randomUUID();
+    const input = baseSubmit(projectId);
+    input.files = [claim(projectId, 1, "artwork_front"), claim(projectId, 1, "invoice", "application/pdf")];
+    const result = await createProject(input, projectId);
+    expect(result.ok).toBe(false);
+  });
+
+  it("rejects when a claimed file is missing from R2", async () => {
+    const projectId = randomUUID();
+    const input = baseSubmit(projectId);
+    r2store.delete(input.files[0]!.r2Key);
+    const result = await createProject(input, projectId);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.message).toMatch(/could not be found/);
+  });
+});
+
+describe("review lifecycle (§5 rows 3–5, 8)", () => {
+  it("advances content → legal → final → approved with stage_reviews rows", async () => {
+    const { projectId } = await makeProject();
+    for (const stage of ["content_review", "legal_review", "final_review"] as const) {
+      const result = await decideReview({
+        projectId,
+        stage,
+        decision: "advanced",
+        checklist: { checked: true },
+        notes: null,
+        adminId,
+      });
+      expect(result.ok, `${stage} should advance`).toBe(true);
+    }
+    const [project] = await db.select().from(projects).where(eq(projects.id, projectId));
+    expect(project!.status).toBe("approved");
+    const reviews = await db
+      .select()
+      .from(stageReviews)
+      .where(eq(stageReviews.projectId, projectId));
+    expect(reviews).toHaveLength(3);
+  });
+
+  it("denies with notes at any stage (terminal)", async () => {
+    const { projectId } = await makeProject();
+    const result = await decideReview({
+      projectId,
+      stage: "content_review",
+      decision: "denied",
+      checklist: {},
+      notes: "Disclaimer missing entirely.",
+      adminId,
+    });
+    expect(result.ok).toBe(true);
+    const [project] = await db.select().from(projects).where(eq(projects.id, projectId));
+    expect(project!.status).toBe("denied");
+  });
+
+  it("rejects a decision for a stage the project is not at (stale click)", async () => {
+    const { projectId } = await makeProject();
+    const result = await decideReview({
+      projectId,
+      stage: "legal_review",
+      decision: "advanced",
+      checklist: {},
+      notes: null,
+      adminId,
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.message).toMatch(/already moved/);
+  });
+
+  it("CONCURRENT CLICKS: exactly one of two simultaneous decisions wins", async () => {
+    const { projectId } = await makeProject();
+    const decide = () =>
+      decideReview({
+        projectId,
+        stage: "content_review",
+        decision: "advanced",
+        checklist: {},
+        notes: null,
+        adminId,
+      });
+    const [a, b] = await Promise.all([decide(), decide()]);
+    const oks = [a.ok, b.ok].filter(Boolean);
+    expect(oks).toHaveLength(1);
+    const loser = a.ok ? b : a;
+    if (!loser.ok) expect(loser.message).toMatch(/already moved to Legal Review/);
+
+    // No double transition: status advanced exactly one step, one review row.
+    const [project] = await db.select().from(projects).where(eq(projects.id, projectId));
+    expect(project!.status).toBe("legal_review");
+    const reviews = await db
+      .select()
+      .from(stageReviews)
+      .where(eq(stageReviews.projectId, projectId));
+    expect(reviews).toHaveLength(1);
+  });
+});
+
+describe("resubmission routing rule (§5 row 7)", () => {
+  async function bounceAt(stage: "content_review" | "legal_review" | "final_review") {
+    const { projectId, rawToken } = await makeProject();
+    const advanceOrder = ["content_review", "legal_review", "final_review"] as const;
+    for (const s of advanceOrder) {
+      if (s === stage) break;
+      const r = await decideReview({
+        projectId,
+        stage: s,
+        decision: "advanced",
+        checklist: {},
+        notes: null,
+        adminId,
+      });
+      if (!r.ok) throw new Error(r.message);
+    }
+    const bounce = await decideReview({
+      projectId,
+      stage,
+      decision: "changes_requested",
+      checklist: {},
+      notes: "Please fix.",
+      adminId,
+    });
+    if (!bounce.ok) throw new Error(bounce.message);
+    return { projectId, rawToken };
+  }
+
+  it("artwork change from a legal_review kickback routes to content_review", async () => {
+    const { projectId, rawToken } = await bounceAt("legal_review");
+    const result = await resubmitProject(
+      resubmitPayload(rawToken, projectId, 2, {
+        uploads: [claim(projectId, 2, "artwork_front"), claim(projectId, 2, "artwork_back")],
+        carry: ["invoice"],
+      }),
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.artworkChanged).toBe(true);
+      expect(result.value.newStatus).toBe("content_review");
+    }
+  });
+
+  it("non-artwork change returns to the kicking stage, files carry forward sharing r2 keys", async () => {
+    const { projectId, rawToken } = await bounceAt("final_review");
+    const result = await resubmitProject(
+      resubmitPayload(rawToken, projectId, 2, {
+        uploads: [claim(projectId, 2, "invoice", "application/pdf")],
+        carry: ["artwork_front", "artwork_back"],
+        note: "New invoice only.",
+      }),
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.artworkChanged).toBe(false);
+      expect(result.value.newStatus).toBe("final_review");
+    }
+    // carry-forward: v2 artwork rows point at v1 keys (shared within project).
+    const fileRows = await db.select().from(files).where(eq(files.projectId, projectId));
+    const v2Front = fileRows.filter((f) => f.kind === "artwork_front");
+    expect(v2Front).toHaveLength(2);
+    expect(new Set(v2Front.map((f) => f.r2Key)).size).toBe(1);
+  });
+
+  it("mode switch to combined routes to content_review; mixing modes is rejected", async () => {
+    const { projectId, rawToken } = await bounceAt("legal_review");
+    const bad = await resubmitProject(
+      resubmitPayload(rawToken, projectId, 2, {
+        uploads: [claim(projectId, 2, "artwork_combined")],
+        carry: ["artwork_front", "invoice"], // front + combined = invalid mix
+      }),
+    );
+    expect(bad.ok).toBe(false);
+
+    const good = await resubmitProject(
+      resubmitPayload(rawToken, projectId, 2, {
+        uploads: [claim(projectId, 2, "artwork_combined")],
+        carry: ["invoice"],
+      }),
+    );
+    expect(good.ok).toBe(true);
+    if (good.ok) expect(good.value.newStatus).toBe("content_review");
+  });
+
+  it("rejects a no-op resubmission (nothing changed, no note)", async () => {
+    const { projectId, rawToken } = await bounceAt("content_review");
+    const result = await resubmitProject(
+      resubmitPayload(rawToken, projectId, 2, {
+        carry: ["artwork_front", "artwork_back", "invoice"],
+      }),
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.message).toMatch(/Nothing changed/);
+  });
+
+  it("a note alone is a valid resubmission and returns to the kicking stage", async () => {
+    const { projectId, rawToken } = await bounceAt("content_review");
+    const result = await resubmitProject(
+      resubmitPayload(rawToken, projectId, 2, {
+        carry: ["artwork_front", "artwork_back", "invoice"],
+        note: "The disclaimer is on the back, bottom-left — see version 1.",
+      }),
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.newStatus).toBe("content_review");
+  });
+
+  it("rejects resubmission when the project is not awaiting changes", async () => {
+    const { projectId, rawToken } = await makeProject();
+    const result = await resubmitProject(
+      resubmitPayload(rawToken, projectId, 2, {
+        carry: ["artwork_front", "artwork_back", "invoice"],
+        note: "hello",
+      }),
+    );
+    expect(result.ok).toBe(false);
+  });
+
+  it("rejects an invalid vendor token", async () => {
+    const { projectId } = await makeProject();
+    const result = await resubmitProject(
+      resubmitPayload("not-a-real-token", projectId, 2, { note: "x" }),
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.status).toBe(404);
+  });
+});
+
+describe("reopen (§5 row 10) and re-decide", () => {
+  it("superuser reopens an approved project to final_review and can re-decide (upsert)", async () => {
+    const { projectId } = await makeProject();
+    for (const stage of ["content_review", "legal_review", "final_review"] as const) {
+      const r = await decideReview({ projectId, stage, decision: "advanced", checklist: {}, notes: null, adminId });
+      expect(r.ok).toBe(true);
+    }
+
+    const denied = await reopenProject({ projectId, reason: "", adminId: superuserId, isSuperuser: true });
+    expect(denied.ok).toBe(false); // reason required
+
+    const notSuper = await reopenProject({ projectId, reason: "Costs changed", adminId, isSuperuser: false });
+    expect(notSuper.ok).toBe(false);
+
+    const reopened = await reopenProject({ projectId, reason: "Costs changed", adminId: superuserId, isSuperuser: true });
+    expect(reopened.ok).toBe(true);
+    const [project] = await db.select().from(projects).where(eq(projects.id, projectId));
+    expect(project!.status).toBe("final_review");
+
+    // Re-decide final_review on the same version: upsert keeps one row.
+    const redecide = await decideReview({
+      projectId,
+      stage: "final_review",
+      decision: "denied",
+      checklist: {},
+      notes: "Costs no longer match the invoice.",
+      adminId,
+    });
+    expect(redecide.ok).toBe(true);
+    const reviews = await db
+      .select()
+      .from(stageReviews)
+      .where(eq(stageReviews.projectId, projectId));
+    expect(reviews.filter((r) => r.stage === "final_review")).toHaveLength(1);
+    expect(reviews.find((r) => r.stage === "final_review")!.decision).toBe("denied");
+  });
+});
+
+describe("payment tracking, link rotation, dashboard", () => {
+  it("marks a paid_by_kdp contact paid/unpaid with events; rejects others", async () => {
+    const { projectId } = await makeProject();
+    const rows = await db.select().from(contacts).where(eq(contacts.projectId, projectId));
+    const printShop = rows.find((c) => c.role === "print_shop")!;
+    const mailHouse = rows.find((c) => c.role === "mail_house")!;
+
+    const paid = await setContactPaid({ projectId, contactId: printShop.id, paid: true, adminId });
+    expect(paid.ok).toBe(true);
+    const notEligible = await setContactPaid({ projectId, contactId: mailHouse.id, paid: true, adminId });
+    expect(notEligible.ok).toBe(false);
+
+    const dash = await getDashboardRows();
+    const row = dash.find((r) => r.id === projectId)!;
+    expect(row.paidNeeded).toBe(1);
+    expect(row.paidDone).toBe(1);
+
+    const unpaid = await setContactPaid({ projectId, contactId: printShop.id, paid: false, adminId });
+    expect(unpaid.ok).toBe(true);
+  });
+
+  it("regenerating the link rotates the hash and stamps token_rotated_at", async () => {
+    const { projectId, rawToken } = await makeProject();
+    const before = hashVendorToken(rawToken);
+    const result = await regenerateLink({ projectId, adminId });
+    expect(result.ok).toBe(true);
+    const [project] = await db.select().from(projects).where(eq(projects.id, projectId));
+    expect(project!.vendorTokenHash).not.toBe(before);
+    expect(project!.tokenRotatedAt).not.toBeNull();
+    if (result.ok) {
+      expect(hashVendorToken(result.value.rawToken)).toBe(project!.vendorTokenHash);
+    }
+  });
+});
+
+describe("deletion (§10)", () => {
+  it("requires the typed candidate name, purges R2, tombstones, cascades", async () => {
+    const { projectId } = await makeProject();
+
+    const wrongName = await deleteProject({ projectId, confirmName: "Wrong Name", adminId });
+    expect(wrongName.ok).toBe(false);
+
+    const result = await deleteProject({ projectId, confirmName: "Test Candidate", adminId });
+    expect(result.ok).toBe(true);
+
+    expect(
+      [...r2store.keys()].filter((k) => k.startsWith(`projects/${projectId}/`)),
+    ).toHaveLength(0);
+
+    const [gone] = await db.select().from(projects).where(eq(projects.id, projectId));
+    expect(gone).toBeUndefined();
+    const fileRows = await db.select().from(files).where(eq(files.projectId, projectId));
+    expect(fileRows).toHaveLength(0);
+
+    const [tombstone] = await db
+      .select()
+      .from(deletedProjects)
+      .where(eq(deletedProjects.id, projectId));
+    expect(tombstone).toBeDefined();
+    expect(tombstone!.candidateSupported).toBe("Test Candidate");
+    expect(tombstone!.finalStatus).toBe("content_review");
+  });
+});

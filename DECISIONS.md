@@ -41,6 +41,15 @@ contradiction resolved by the implementer — flagged for explicit review.
 - Combined-mode "keep current artwork" on resubmit carries forward whatever artwork kinds the current version holds (an auto-split PDF's front/back carry as front/back).
 - Vendor status page also links nothing for invoices (spec lists artwork thumbnails only); invoice presence is visible in version history filenames only via the resubmit form's "keep current file" hints.
 
+## Phase 6 — Admin surface
+
+- Review notes are required for "Request changes" and "Deny" (the vendor receives them verbatim per §12); optional for "Advance".
+- CSV `?year=` filters by mail-date year (the operative campaign year), for live rows and tombstones alike.
+- New/reset admin accounts get a server-generated 16-char temp password shown once to the superuser (§7 says "create with temp password" without specifying who picks it); reset and deactivate both end the target's sessions. Reactivation added as the undo for deactivation.
+- Admin project page links the current invoice via presigned GET (the final-review "costs match invoice" checklist needs it; §6 lists artwork display only).
+- A superuser can't deactivate their own account.
+- Deny asks for a browser confirm() since it's terminal.
+
 ## Phase 2 — State machine
 
 - After a superuser reopen (approved → final_review), the current version may already hold a final_review decision; re-deciding will upsert that `stage_reviews` row (the `unique (version_id, stage)` constraint stays intact, latest decision wins, and the full history remains in `events`). The spec doesn't address this corner.

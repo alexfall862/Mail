@@ -1,0 +1,434 @@
+/**
+ * Admin project operations (SPEC §5, §7, §10). Every state transition runs in
+ * a transaction holding SELECT … FOR UPDATE on the project row; the losing
+ * side of a concurrent action gets a clean "already moved" error.
+ */
+import { asc, desc, eq, sql } from "drizzle-orm";
+import { db } from "@/db";
+import {
+  admins,
+  contacts as contactsTable,
+  deletedProjects,
+  events as eventsTable,
+  files as filesTable,
+  projects,
+  stageReviews,
+  submissionVersions,
+} from "@/db/schema";
+import { logEvent } from "./events";
+import { deleteProjectPrefix } from "./r2";
+import {
+  transition,
+  type ProjectStatus,
+  type ReviewDecision,
+  type ReviewStage,
+} from "./state-machine";
+import { generateVendorToken } from "./tokens";
+
+export type OpResult<T> =
+  | { ok: true; value: T }
+  | { ok: false; status: number; message: string };
+
+function fail<T>(status: number, message: string): OpResult<T> {
+  return { ok: false, status, message };
+}
+
+async function lockProject(tx: Tx, projectId: string) {
+  await tx.execute(sql`select id from projects where id = ${projectId} for update`);
+  const [project] = await tx
+    .select()
+    .from(projects)
+    .where(eq(projects.id, projectId));
+  return project ?? null;
+}
+
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+export type ReviewOutcome = {
+  projectId: string;
+  stage: ReviewStage;
+  decision: ReviewDecision;
+  notes: string | null;
+  newStatus: ProjectStatus;
+};
+
+/** §5 rows 3–6, 8: an admin review decision at the project's current stage. */
+export async function decideReview(input: {
+  projectId: string;
+  stage: ReviewStage;
+  decision: ReviewDecision;
+  checklist: Record<string, boolean>;
+  notes: string | null;
+  adminId: string;
+}): Promise<OpResult<ReviewOutcome>> {
+  return db.transaction(async (tx) => {
+    const project = await lockProject(tx, input.projectId);
+    if (!project) return fail(404, "Project not found.");
+
+    const result = transition(
+      {
+        status: project.status,
+        changesRequestedFrom: project.changesRequestedFrom,
+      },
+      { kind: "review_decision", stage: input.stage, decision: input.decision },
+    );
+    if (!result.ok) return fail(409, result.message);
+    if (!project.currentVersionId) return fail(500, "Project has no current version.");
+
+    // One decision per stage per version. The only legitimate re-decide is
+    // after a superuser reopen (same version back at final_review) — upsert
+    // keeps the constraint intact with the latest decision; the full history
+    // stays in events.
+    await tx
+      .insert(stageReviews)
+      .values({
+        projectId: project.id,
+        versionId: project.currentVersionId,
+        stage: input.stage,
+        decision: input.decision,
+        checklist: input.checklist,
+        notes: input.notes,
+        reviewerId: input.adminId,
+      })
+      .onConflictDoUpdate({
+        target: [stageReviews.versionId, stageReviews.stage],
+        set: {
+          decision: input.decision,
+          checklist: input.checklist,
+          notes: input.notes,
+          reviewerId: input.adminId,
+          decidedAt: new Date(),
+        },
+      });
+
+    await tx
+      .update(projects)
+      .set({
+        status: result.state.status,
+        changesRequestedFrom: result.state.changesRequestedFrom,
+        statusChangedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(projects.id, project.id));
+
+    await logEvent(tx, {
+      projectId: project.id,
+      actor: "admin",
+      actorId: input.adminId,
+      eventType: "review.decided",
+      payload: {
+        stage: input.stage,
+        decision: input.decision,
+        checklist: input.checklist,
+        notes: input.notes,
+      },
+    });
+    await logEvent(tx, {
+      projectId: project.id,
+      actor: "admin",
+      actorId: input.adminId,
+      eventType: "status.changed",
+      payload: { from: project.status, to: result.state.status },
+    });
+
+    return {
+      ok: true as const,
+      value: {
+        projectId: project.id,
+        stage: input.stage,
+        decision: input.decision,
+        notes: input.notes,
+        newStatus: result.state.status,
+      },
+    };
+  });
+}
+
+/** §5 row 10: superuser reopen with a required reason. */
+export async function reopenProject(input: {
+  projectId: string;
+  reason: string;
+  adminId: string;
+  isSuperuser: boolean;
+}): Promise<OpResult<{ newStatus: ProjectStatus; reason: string }>> {
+  return db.transaction(async (tx) => {
+    const project = await lockProject(tx, input.projectId);
+    if (!project) return fail(404, "Project not found.");
+
+    const result = transition(
+      {
+        status: project.status,
+        changesRequestedFrom: project.changesRequestedFrom,
+      },
+      {
+        kind: "superuser_reopen",
+        actorIsSuperuser: input.isSuperuser,
+        reason: input.reason,
+      },
+    );
+    if (!result.ok) {
+      return fail(result.code === "not_superuser" ? 403 : 409, result.message);
+    }
+
+    await tx
+      .update(projects)
+      .set({
+        status: result.state.status,
+        changesRequestedFrom: null,
+        statusChangedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(projects.id, project.id));
+
+    await logEvent(tx, {
+      projectId: project.id,
+      actor: "admin",
+      actorId: input.adminId,
+      eventType: "project.reopened",
+      payload: {
+        reason: input.reason.trim(),
+        from: project.status,
+        to: result.state.status,
+      },
+    });
+    await logEvent(tx, {
+      projectId: project.id,
+      actor: "admin",
+      actorId: input.adminId,
+      eventType: "status.changed",
+      payload: { from: project.status, to: result.state.status },
+    });
+
+    return {
+      ok: true as const,
+      value: { newStatus: result.state.status, reason: input.reason.trim() },
+    };
+  });
+}
+
+/**
+ * §10 deletion: R2 purge first (an orphaned object costs ~nothing; a dangling
+ * DB row is worse), then tombstone + cascade delete in one transaction.
+ * Requires the typed candidate name to match. No emails.
+ */
+export async function deleteProject(input: {
+  projectId: string;
+  confirmName: string;
+  adminId: string;
+}): Promise<OpResult<{ deleted: true }>> {
+  const [project] = await db
+    .select()
+    .from(projects)
+    .where(eq(projects.id, input.projectId));
+  if (!project) return fail(404, "Project not found.");
+  if (input.confirmName.trim() !== project.candidateSupported) {
+    return fail(
+      400,
+      "The name you typed doesn't match the candidate on this project.",
+    );
+  }
+
+  // First-attempt R2 purge before the transaction; log leftovers rather than
+  // blocking the DB delete.
+  try {
+    const purge = await deleteProjectPrefix(project.id);
+    if (!purge.verifiedEmpty) {
+      console.error(
+        `R2 purge incomplete for project ${project.id}: prefix not empty after delete`,
+      );
+    }
+  } catch (err) {
+    console.error(`R2 purge failed for project ${project.id}:`, err);
+  }
+
+  await db.transaction(async (tx) => {
+    await tx.insert(deletedProjects).values({
+      id: project.id,
+      candidateSupported: project.candidateSupported,
+      office: project.office,
+      mailDate: project.mailDate,
+      finalStatus: project.status,
+      totalCostCents: project.totalCostCents,
+      deletedBy: input.adminId,
+    });
+    // Cascades remove versions, files, contacts, reviews, events.
+    await tx.delete(projects).where(eq(projects.id, project.id));
+  });
+
+  return { ok: true as const, value: { deleted: true } };
+}
+
+/** §7: regenerate the magic link; old link stops working immediately. */
+export async function regenerateLink(input: {
+  projectId: string;
+  adminId: string;
+}): Promise<OpResult<{ rawToken: string }>> {
+  const token = generateVendorToken();
+  const result = await db.transaction(async (tx) => {
+    const project = await lockProject(tx, input.projectId);
+    if (!project) return fail<{ rawToken: string }>(404, "Project not found.");
+    await tx
+      .update(projects)
+      .set({
+        vendorTokenHash: token.hash,
+        tokenRotatedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(projects.id, project.id));
+    await logEvent(tx, {
+      projectId: project.id,
+      actor: "admin",
+      actorId: input.adminId,
+      eventType: "token.rotated",
+      payload: {},
+    });
+    return { ok: true as const, value: { rawToken: token.raw } };
+  });
+  return result;
+}
+
+/** Toggle a contact's paid state (visible only where paid_by_kdp). */
+export async function setContactPaid(input: {
+  projectId: string;
+  contactId: string;
+  paid: boolean;
+  adminId: string;
+}): Promise<OpResult<{ paidAt: Date | null }>> {
+  return db.transaction(async (tx) => {
+    const [contact] = await tx
+      .select()
+      .from(contactsTable)
+      .where(eq(contactsTable.id, input.contactId));
+    if (!contact || contact.projectId !== input.projectId) {
+      return fail(404, "Contact not found.");
+    }
+    if (!contact.paidByKdp) {
+      return fail(400, "This vendor is not marked as needing KDP payment.");
+    }
+    const paidAt = input.paid ? new Date() : null;
+    await tx
+      .update(contactsTable)
+      .set({ paidAt, paidMarkedBy: input.paid ? input.adminId : null })
+      .where(eq(contactsTable.id, contact.id));
+    await logEvent(tx, {
+      projectId: input.projectId,
+      actor: "admin",
+      actorId: input.adminId,
+      eventType: input.paid ? "contact.paid" : "contact.unpaid",
+      payload: { contactId: contact.id, role: contact.role, org: contact.orgName },
+    });
+    return { ok: true as const, value: { paidAt } };
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Admin read models
+// ---------------------------------------------------------------------------
+
+export type AdminProjectView = {
+  project: typeof projects.$inferSelect;
+  contacts: Array<typeof contactsTable.$inferSelect>;
+  versions: Array<
+    typeof submissionVersions.$inferSelect & {
+      files: Array<typeof filesTable.$inferSelect>;
+    }
+  >;
+  reviews: Array<
+    typeof stageReviews.$inferSelect & { reviewerName: string | null }
+  >;
+  events: Array<typeof eventsTable.$inferSelect & { actorName: string | null }>;
+};
+
+export async function getAdminProjectView(
+  projectId: string,
+): Promise<AdminProjectView | null> {
+  const [project] = await db
+    .select()
+    .from(projects)
+    .where(eq(projects.id, projectId));
+  if (!project) return null;
+
+  const [contactRows, versions, allFiles, reviewRows, eventRows] =
+    await Promise.all([
+      db
+        .select()
+        .from(contactsTable)
+        .where(eq(contactsTable.projectId, projectId))
+        .orderBy(asc(contactsTable.role)),
+      db
+        .select()
+        .from(submissionVersions)
+        .where(eq(submissionVersions.projectId, projectId))
+        .orderBy(desc(submissionVersions.versionNumber)),
+      db.select().from(filesTable).where(eq(filesTable.projectId, projectId)),
+      db
+        .select({
+          review: stageReviews,
+          reviewerName: admins.name,
+        })
+        .from(stageReviews)
+        .leftJoin(admins, eq(stageReviews.reviewerId, admins.id))
+        .where(eq(stageReviews.projectId, projectId))
+        .orderBy(desc(stageReviews.decidedAt)),
+      db
+        .select({ event: eventsTable, actorName: admins.name })
+        .from(eventsTable)
+        .leftJoin(admins, eq(eventsTable.actorId, admins.id))
+        .where(eq(eventsTable.projectId, projectId))
+        .orderBy(desc(eventsTable.createdAt), desc(eventsTable.id)),
+    ]);
+
+  return {
+    project,
+    contacts: contactRows,
+    versions: versions.map((v) => ({
+      ...v,
+      files: allFiles.filter((f) => f.versionId === v.id),
+    })),
+    reviews: reviewRows.map((r) => ({ ...r.review, reviewerName: r.reviewerName })),
+    events: eventRows.map((e) => ({ ...e.event, actorName: e.actorName })),
+  };
+}
+
+export type DashboardRow = {
+  id: string;
+  candidateSupported: string;
+  office: string;
+  status: ProjectStatus;
+  mailDate: string;
+  pieceCount: number;
+  totalCostCents: number;
+  paidNeeded: number;
+  paidDone: number;
+};
+
+export async function getDashboardRows(
+  statusFilter?: ProjectStatus,
+): Promise<DashboardRow[]> {
+  const rows = await db
+    .select()
+    .from(projects)
+    .where(statusFilter ? eq(projects.status, statusFilter) : undefined)
+    .orderBy(asc(projects.mailDate)); // §8: default sort mail_date asc
+  if (rows.length === 0) return [];
+  const allContacts = await db.select().from(contactsTable);
+  const byProject = new Map<string, { needed: number; done: number }>();
+  for (const c of allContacts) {
+    if (!c.paidByKdp) continue;
+    const entry = byProject.get(c.projectId) ?? { needed: 0, done: 0 };
+    entry.needed += 1;
+    if (c.paidAt) entry.done += 1;
+    byProject.set(c.projectId, entry);
+  }
+  return rows.map((p) => ({
+    id: p.id,
+    candidateSupported: p.candidateSupported,
+    office: p.office,
+    status: p.status,
+    mailDate: p.mailDate,
+    pieceCount: p.pieceCount,
+    totalCostCents: p.totalCostCents,
+    paidNeeded: byProject.get(p.id)?.needed ?? 0,
+    paidDone: byProject.get(p.id)?.done ?? 0,
+  }));
+}
