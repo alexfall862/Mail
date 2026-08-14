@@ -431,6 +431,107 @@ export function OverrideWaitButton({
   );
 }
 
+export type ReviewerContactOption = {
+  name: string;
+  email: string;
+  note?: string;
+};
+
+/**
+ * Manual notice to the standing reviewer roster (compliance/legal) for the
+ * current stage. Recipients default to everyone configured; individual
+ * contacts can be unticked before sending.
+ */
+export function ReviewerNoticeButtons({
+  projectId,
+  stageLabel,
+  contacts,
+}: {
+  projectId: string;
+  stageLabel: string;
+  contacts: ReviewerContactOption[];
+}) {
+  const router = useRouter();
+  const [selected, setSelected] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(contacts.map((c) => [c.email, true])),
+  );
+  const [ccAdmins, setCcAdmins] = useState(true);
+  const [extraCc, setExtraCc] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  const chosen = contacts.filter((c) => selected[c.email]);
+
+  return (
+    <div className="max-w-xl space-y-3">
+      <div>
+        <p className="text-xs font-medium uppercase text-gray-500">
+          {stageLabel} reviewers
+        </p>
+        <ul className="mt-1 space-y-1">
+          {contacts.map((c) => (
+            <li key={c.email}>
+              <label className="flex items-center gap-2 text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={selected[c.email] ?? false}
+                  onChange={(e) =>
+                    setSelected((s) => ({ ...s, [c.email]: e.target.checked }))
+                  }
+                />
+                {c.name} · {c.email}
+                {c.note ? (
+                  <span className="text-xs text-gray-500">({c.note})</span>
+                ) : null}
+              </label>
+            </li>
+          ))}
+        </ul>
+      </div>
+      <EmailOptionsFields
+        ccAdmins={ccAdmins}
+        onCcAdmins={setCcAdmins}
+        extraCc={extraCc}
+        onExtraCc={setExtraCc}
+      />
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          disabled={busy || chosen.length === 0}
+          onClick={async () => {
+            if (
+              !window.confirm(
+                `Email ${chosen.map((c) => c.name).join(", ")} asking them to review this piece? The email includes the status link and the scheduled mail date.`,
+              )
+            )
+              return;
+            setBusy(true);
+            setMessage(null);
+            const result = await postJson(
+              `/api/admin/projects/${projectId}/reviewer-notice`,
+              {
+                recipients: chosen.map((c) => c.email),
+                emailOptions: { ccAdmins, extraCc: parseExtraCc(extraCc) },
+              },
+            );
+            setBusy(false);
+            setMessage(
+              result.ok
+                ? `Notice sent to ${chosen.map((c) => c.email).join(", ")}.`
+                : (result.message ?? "Send failed."),
+            );
+            router.refresh();
+          }}
+          className="rounded-md border border-indigo-600 bg-white px-3 py-1.5 text-sm font-medium text-indigo-800 hover:bg-indigo-50 disabled:opacity-50"
+        >
+          {busy ? "Sending…" : "Notify reviewers"}
+        </button>
+        {message && <span className="text-xs text-gray-600">{message}</span>}
+      </div>
+    </div>
+  );
+}
+
 export function CampaignReviewEmailButton({
   projectId,
   contactName,

@@ -17,6 +17,7 @@ import {
 } from "@/lib/state-machine";
 import type { UploadKind } from "@/lib/uploads";
 import { suggestedContactsFor } from "@/lib/campaign-contacts";
+import { reviewerContactsFor } from "@/lib/reviewer-contacts";
 import {
   CampaignContactCard,
   CampaignReviewEmailButton,
@@ -25,6 +26,7 @@ import {
   PaidCheckbox,
   RegenerateLinkButton,
   ReopenButton,
+  ReviewerNoticeButtons,
   ReviewPanel,
 } from "./actions";
 import { VersionCompare, type ArtworkSet } from "./version-compare";
@@ -176,6 +178,15 @@ export default async function AdminProjectPage({
           <h2 className="mb-4 text-lg font-semibold text-gray-900">
             {STATUS_LABELS[status]} decision
           </h2>
+          {reviewerContactsFor(status).length > 0 && (
+            <div className="mb-5 border-b border-blue-200 pb-5">
+              <ReviewerNoticeButtons
+                projectId={project.id}
+                stageLabel={STATUS_LABELS[status]}
+                contacts={reviewerContactsFor(status)}
+              />
+            </div>
+          )}
           {status === "campaign_review" && (
             <div className="mb-5 border-b border-blue-200 pb-5">
               {project.campaignContactEmail ? (

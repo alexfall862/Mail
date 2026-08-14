@@ -4,6 +4,7 @@ import {
   adminReopened,
   adminResubmission,
   campaignReviewRequest,
+  reviewerNotice,
   vendorApproved,
   vendorChangesRequested,
   vendorConfirmation,
@@ -37,6 +38,7 @@ function vendorTemplates(): EmailContent[] {
     vendorDenied(summary, "Because reasons", MAGIC),
     vendorLinkRegenerated(summary, MAGIC),
     campaignReviewRequest(summary, ["Print Co", "Mail Co"], MAGIC),
+    reviewerNotice(summary, "Legal Review", MAGIC),
   ];
 }
 
@@ -108,6 +110,14 @@ describe("email templates (§12)", () => {
     expect(t.text).toContain("working with Print Co and Mail Co");
     const noPartners = campaignReviewRequest(summary, [], MAGIC);
     expect(noPartners.text).toContain("working with our mail vendors");
+  });
+
+  it("reviewer notice names the stage, race, and mail date", () => {
+    const t = reviewerNotice(summary, "Legal Review", MAGIC);
+    expect(t.subject).toContain("Legal Review needed");
+    expect(t.text).toContain("awaiting legal review");
+    expect(t.text).toContain("Jane Doe");
+    expect(t.text).toContain("Oct 12, 2026");
   });
 
   it("html-escapes user-controlled fields", () => {

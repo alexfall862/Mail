@@ -286,6 +286,37 @@ export function campaignReviewRequest(
   };
 }
 
+/* --------------------------- reviewer notice (admin-triggered, any stage) */
+export function reviewerNotice(
+  p: ProjectSummary,
+  stageLabel: string,
+  magicLink: string | null,
+): EmailContent {
+  const subject = subj(
+    `${stageLabel} needed: mail piece supporting ${p.candidateSupported}`,
+  );
+  const reviewButton = magicLink
+    ? `<p style="${styles.p}"><a href="${esc(magicLink)}" style="${styles.button}">View the mail piece</a></p>`
+    : "";
+  const bodyHtml =
+    `<p style="${styles.p}">The KDP Mail Program has a piece awaiting <strong>${esc(stageLabel.toLowerCase())}</strong>:</p>` +
+    `<p style="${styles.p}"><strong>${esc(p.candidateSupported)}</strong><br/>${esc(p.officeLabel)}<br/>Scheduled mail date: ${esc(p.mailDateFormatted)}</p>` +
+    `<p style="${styles.p}">Please take a look and report any issues to the mail program team by replying to this email.</p>` +
+    reviewButton;
+  const text =
+    `The KDP Mail Program has a piece awaiting ${stageLabel.toLowerCase()}:\n\n` +
+    `${p.candidateSupported}\n${p.officeLabel}\nScheduled mail date: ${p.mailDateFormatted}\n\n` +
+    `Please take a look and report any issues to the mail program team by replying to this email.` +
+    (magicLink ? `\n\nView the mail piece: ${magicLink}` : "") +
+    vendorFooterText(magicLink);
+  return {
+    template: "reviewer_notice",
+    subject,
+    ...wrap({ heading: `${stageLabel} needed`, bodyHtml, magicLink }),
+    text,
+  };
+}
+
 /* ------------------------------------------- §5 row 10 (admin notice) */
 export function adminReopened(
   p: ProjectSummary,
