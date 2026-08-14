@@ -21,8 +21,8 @@ export const reviewDecisionSchema = z
         path: ["notes"],
         message:
           data.decision === "changes_requested"
-            ? "Explain what needs to change — the vendor sees these notes."
-            : "Give a reason — the vendor sees these notes.",
+            ? "Explain what needs to change. The vendor sees these notes."
+            : "Give a reason. The vendor sees these notes.",
       });
     }
   });

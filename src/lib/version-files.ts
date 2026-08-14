@@ -23,7 +23,7 @@ export function validateVersionFileSet(kinds: UploadKind[]): ValidityResult {
     return {
       ok: false,
       message:
-        "Artwork must be either separate front/back files or one combined file — not both.",
+        "Artwork must be either separate front/back files or one combined file, not both.",
     };
   }
   if (separate && (!has("artwork_front") || !has("artwork_back"))) {

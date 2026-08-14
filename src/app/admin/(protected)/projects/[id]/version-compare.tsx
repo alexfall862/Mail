@@ -23,7 +23,7 @@ function SetGrid({ set }: { set: ArtworkSet }) {
         <figure key={img.id}>
           <ArtworkImage src={img.url} alt={img.label} />
           <figcaption className="mt-1 text-sm text-gray-600">
-            {img.label} — {img.filename}
+            {img.label} - {img.filename}
           </figcaption>
         </figure>
       ))}

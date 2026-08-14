@@ -25,7 +25,7 @@ import {
 } from "./actions";
 import { VersionCompare, type ArtworkSet } from "./version-compare";
 
-export const metadata = { title: "Project — KDP Mail Approval" };
+export const metadata = { title: "Project - KDP Mail Approval" };
 export const dynamic = "force-dynamic";
 
 function artworkLabel(kind: UploadKind): string {
@@ -104,7 +104,7 @@ export default async function AdminProjectPage({
           </h1>
           <p className="mt-1 text-sm text-gray-600">
             {officeLabel(project.office as Office)}
-            {project.districtDetail ? ` — ${project.districtDetail}` : ""}
+            {project.districtDetail ? ` · ${project.districtDetail}` : ""}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
@@ -132,7 +132,7 @@ export default async function AdminProjectPage({
         <Fact label="Permit number" value={project.permitNumber} />
         <Fact
           label={DISTRICT_DETAIL_LABEL}
-          value={project.districtDetail ?? "—"}
+          value={project.districtDetail ?? "-"}
         />
         <Fact label="Submitted" value={formatDateTime(project.createdAt)} />
         <Fact
@@ -148,7 +148,7 @@ export default async function AdminProjectPage({
         <div className="sm:col-span-2 lg:col-span-3">
           <p className="text-xs uppercase text-gray-500">Campaign contact</p>
           <p className="mt-0.5 text-gray-900">
-            {project.campaignContactName || "—"}
+            {project.campaignContactName || "-"}
             {project.campaignContactEmail && ` · ${project.campaignContactEmail}`}
             {project.campaignContactPhone && ` · ${project.campaignContactPhone}`}
           </p>
@@ -165,7 +165,7 @@ export default async function AdminProjectPage({
       {isReviewStage(status) && (
         <section className="rounded-lg border border-blue-200 bg-blue-50/40 p-5">
           <h2 className="mb-4 text-lg font-semibold text-gray-900">
-            {STATUS_LABELS[status]} — decision
+            {STATUS_LABELS[status]} decision
           </h2>
           <ReviewPanel projectId={project.id} stage={status} />
         </section>
@@ -184,7 +184,7 @@ export default async function AdminProjectPage({
       <section>
         <div className="mb-3 flex items-baseline justify-between">
           <h2 className="text-lg font-semibold text-gray-900">
-            Artwork (version {currentVersion?.versionNumber ?? "—"})
+            Artwork (version {currentVersion?.versionNumber ?? "-"})
           </h2>
           {invoiceUrl && (
             <a
@@ -303,7 +303,7 @@ export default async function AdminProjectPage({
             {reviews.map((r) => (
               <li key={r.id} className="rounded-md border border-gray-200 bg-white p-3">
                 <p className="font-medium text-gray-900">
-                  {STATUS_LABELS[r.stage as ProjectStatus]} —{" "}
+                  {STATUS_LABELS[r.stage as ProjectStatus]}:{" "}
                   {r.decision === "advanced"
                     ? "Advanced"
                     : r.decision === "changes_requested"

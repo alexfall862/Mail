@@ -56,7 +56,7 @@ export function UserManager({
       {revealed.length > 0 && (
         <div className="rounded-md border border-green-300 bg-green-50 p-4 text-sm text-green-900">
           <p className="font-semibold">
-            Temporary passwords — copy now, they won&apos;t be shown again:
+            Temporary passwords. Copy now, they won&apos;t be shown again:
           </p>
           <ul className="mt-2 space-y-1 font-mono">
             {revealed.map((r) => (

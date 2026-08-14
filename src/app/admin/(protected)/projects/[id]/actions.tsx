@@ -60,12 +60,12 @@ export function ReviewPanel({
     if ((decision === "changes_requested" || decision === "denied") && !notes.trim()) {
       setError(
         decision === "changes_requested"
-          ? "Explain what needs to change — the vendor sees these notes."
-          : "Give a reason — the vendor sees these notes.",
+          ? "Explain what needs to change. The vendor sees these notes."
+          : "Give a reason. The vendor sees these notes.",
       );
       return;
     }
-    if (decision === "denied" && !window.confirm("Deny this mail piece? This is terminal — the vendor is notified with your reason.")) {
+    if (decision === "denied" && !window.confirm("Deny this mail piece? This is terminal. The vendor is notified with your reason.")) {
       return;
     }
     setBusy(decision);
@@ -100,7 +100,7 @@ export function ReviewPanel({
           </label>
         ))}
         <p className="text-xs text-gray-500">
-          Checklist is advisory — it&apos;s stored with your decision but not
+          Checklist is advisory. It&apos;s stored with your decision but not
           required to advance.
         </p>
       </div>

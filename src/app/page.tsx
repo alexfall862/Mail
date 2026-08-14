@@ -9,8 +9,8 @@ export default function LandingPage() {
       <p className="mt-4 text-lg text-gray-600">
         Submit political mail pieces to the Kansas Democratic Party for review.
         After you submit, you&apos;ll receive an email with a private link to
-        track your piece through content, legal, and final review — and to send
-        revisions if changes are requested.
+        track your piece through each review step (content, campaign, legal,
+        and final review) and to send revisions if changes are requested.
       </p>
       <Link
         href="/submit"

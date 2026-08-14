@@ -53,7 +53,7 @@ export function putToR2(
       }
     };
     xhr.onerror = () =>
-      reject(new UploadError("Upload failed — check your connection and try again."));
+      reject(new UploadError("Upload failed. Check your connection and try again."));
     xhr.send(blob);
   });
 }

@@ -44,15 +44,15 @@ function wrap(opts: {
   magicLink?: string | null;
 }): { html: string } {
   const footer = opts.magicLink
-    ? `<p style="${styles.footer}">Check status anytime: <a href="${esc(opts.magicLink)}">${esc(opts.magicLink)}</a><br/>This private link is your key to this project — please don't forward it.</p>`
-    : `<p style="${styles.footer}">KDP Mail Program — internal notification.</p>`;
+    ? `<p style="${styles.footer}">Check status anytime: <a href="${esc(opts.magicLink)}">${esc(opts.magicLink)}</a><br/>This private link is your key to this project. Please don't forward it.</p>`
+    : `<p style="${styles.footer}">KDP Mail Program internal notification.</p>`;
   return {
     html: `<!doctype html><html><body style="${styles.body}"><div style="${styles.card}"><h1 style="${styles.h1}">${esc(opts.heading)}</h1>${opts.bodyHtml}${footer}</div></body></html>`,
   };
 }
 
 function vendorFooterText(magicLink: string | null): string {
-  return magicLink ? `\n\n—\nCheck status anytime: ${magicLink}` : "";
+  return magicLink ? `\n\n--\nCheck status anytime: ${magicLink}` : "";
 }
 
 function pieceLine(p: ProjectSummary): string {
@@ -66,15 +66,15 @@ export function vendorConfirmation(
 ): EmailContent {
   const subject = `Submission received: ${p.candidateSupported}`;
   const bodyHtml =
-    `<p style="${styles.p}">Thanks — we received your mail piece submission for <strong>${esc(pieceLine(p))}</strong>.</p>` +
+    `<p style="${styles.p}">Thanks. We received your mail piece submission for <strong>${esc(pieceLine(p))}</strong>.</p>` +
     `<p style="${styles.p}">It now goes through three review steps: content review, legal review, and final review. You'll get an email at each step, and if anything needs to change we'll send you the reviewer's notes with instructions to resubmit.</p>` +
     `<p style="${styles.p}"><a href="${esc(magicLink)}" style="${styles.button}">View your project status</a></p>` +
-    `<p style="${styles.p}"><strong>Bookmark that link</strong> — it's your private page for this project. No account or password needed.</p>`;
+    `<p style="${styles.p}"><strong>Bookmark that link.</strong> It's your private page for this project. No account or password needed.</p>`;
   const text =
-    `Thanks — we received your mail piece submission for ${pieceLine(p)}.\n\n` +
+    `Thanks. We received your mail piece submission for ${pieceLine(p)}.\n\n` +
     `It now goes through three review steps: content review, legal review, and final review. You'll get an email at each step, and if anything needs to change we'll send you the reviewer's notes with instructions to resubmit.\n\n` +
     `View your project status: ${magicLink}\n\n` +
-    `Bookmark that link — it's your private page for this project. No account or password needed.` +
+    `Bookmark that link. It's your private page for this project. No account or password needed.` +
     vendorFooterText(magicLink);
   return {
     template: "vendor_confirmation",
@@ -89,7 +89,7 @@ export function adminNewSubmission(
   p: ProjectSummary,
   adminUrl: string,
 ): EmailContent {
-  const subject = `New mail submission: ${p.candidateSupported} — mails ${p.mailDateFormatted}`;
+  const subject = `New mail submission: ${p.candidateSupported} (mails ${p.mailDateFormatted})`;
   const bodyHtml =
     `<p style="${styles.p}">A new mail piece was submitted:</p>` +
     `<p style="${styles.p}"><strong>${esc(p.candidateSupported)}</strong><br/>${esc(p.officeLabel)}<br/>Mail date: ${esc(p.mailDateFormatted)}</p>` +
@@ -114,10 +114,10 @@ export function vendorStagePassed(
 ): EmailContent {
   const subject = `${p.candidateSupported}: passed ${stageLabel.toLowerCase()}`;
   const bodyHtml =
-    `<p style="${styles.p}">Good news — your mail piece for <strong>${esc(pieceLine(p))}</strong> passed <strong>${esc(stageLabel.toLowerCase())}</strong>.</p>` +
+    `<p style="${styles.p}">Good news. Your mail piece for <strong>${esc(pieceLine(p))}</strong> passed <strong>${esc(stageLabel.toLowerCase())}</strong>.</p>` +
     `<p style="${styles.p}">It has moved on to ${esc(nextStageLabel.toLowerCase())}. No action is needed from you right now.</p>`;
   const text =
-    `Good news — your mail piece for ${pieceLine(p)} passed ${stageLabel.toLowerCase()}.\n\n` +
+    `Good news. Your mail piece for ${pieceLine(p)} passed ${stageLabel.toLowerCase()}.\n\n` +
     `It has moved on to ${nextStageLabel.toLowerCase()}. No action is needed from you right now.` +
     vendorFooterText(magicLink);
   return {
@@ -159,18 +159,18 @@ export function vendorApproved(
   p: ProjectSummary,
   magicLink: string | null,
 ): EmailContent {
-  const subject = `${p.candidateSupported}: approved — cleared to print`;
+  const subject = `${p.candidateSupported}: approved, cleared to print`;
   const bodyHtml =
-    `<p style="${styles.p}">Your mail piece for <strong>${esc(pieceLine(p))}</strong> has completed all reviews and is <strong>approved — you are cleared to print and mail</strong>.</p>` +
+    `<p style="${styles.p}">Your mail piece for <strong>${esc(pieceLine(p))}</strong> has completed all reviews and is <strong>approved. You are cleared to print and mail.</strong></p>` +
     `<p style="${styles.p}">Keep this email for your records. If anything about the piece changes before it mails, contact KDP before printing.</p>`;
   const text =
-    `Your mail piece for ${pieceLine(p)} has completed all reviews and is APPROVED — you are cleared to print and mail.\n\n` +
+    `Your mail piece for ${pieceLine(p)} has completed all reviews and is APPROVED. You are cleared to print and mail.\n\n` +
     `Keep this email for your records. If anything about the piece changes before it mails, contact KDP before printing.` +
     vendorFooterText(magicLink);
   return {
     template: "vendor_approved",
     subject,
-    ...wrap({ heading: "Approved — cleared to print", bodyHtml, magicLink }),
+    ...wrap({ heading: "Approved: cleared to print", bodyHtml, magicLink }),
     text,
   };
 }
@@ -183,11 +183,11 @@ export function vendorDenied(
 ): EmailContent {
   const subject = `${p.candidateSupported}: submission denied`;
   const bodyHtml =
-    `<p style="${styles.p}">We're sorry — your mail piece for <strong>${esc(pieceLine(p))}</strong> was denied. The reviewer's reason:</p>` +
+    `<p style="${styles.p}">We're sorry. Your mail piece for <strong>${esc(pieceLine(p))}</strong> was denied. The reviewer's reason:</p>` +
     `<p style="${styles.notes}">${esc(reason)}</p>` +
     `<p style="${styles.p}">If you believe this was decided in error or want to discuss next steps, reply to this email and the mail program team will follow up.</p>`;
   const text =
-    `We're sorry — your mail piece for ${pieceLine(p)} was denied. The reviewer's reason:\n\n` +
+    `We're sorry. Your mail piece for ${pieceLine(p)} was denied. The reviewer's reason:\n\n` +
     `${reason}\n\n` +
     `If you believe this was decided in error or want to discuss next steps, reply to this email and the mail program team will follow up.` +
     vendorFooterText(magicLink);
@@ -257,11 +257,11 @@ export function adminReopened(
 ): EmailContent {
   const subject = `Reopened: ${p.candidateSupported}`;
   const bodyHtml =
-    `<p style="${styles.p}"><strong>${esc(reopenedBy)}</strong> reopened <strong>${esc(pieceLine(p))}</strong> — it's back in final review.</p>` +
+    `<p style="${styles.p}"><strong>${esc(reopenedBy)}</strong> reopened <strong>${esc(pieceLine(p))}</strong>. It's back in final review.</p>` +
     `<p style="${styles.p}">Reason:</p><p style="${styles.notes}">${esc(reason)}</p>` +
     `<p style="${styles.p}"><a href="${esc(adminUrl)}" style="${styles.button}">Open the project</a></p>`;
   const text =
-    `${reopenedBy} reopened ${pieceLine(p)} — it's back in final review.\n\nReason:\n${reason}\n\nOpen it: ${adminUrl}`;
+    `${reopenedBy} reopened ${pieceLine(p)}. It's back in final review.\n\nReason:\n${reason}\n\nOpen it: ${adminUrl}`;
   return {
     template: "admin_reopened",
     subject,

@@ -20,7 +20,7 @@ import {
 import type { UploadKind } from "@/lib/uploads";
 
 export const metadata = {
-  title: "Project status — KDP Mail Approval",
+  title: "Project status - KDP Mail Approval",
   robots: { index: false, follow: false },
 };
 
@@ -62,7 +62,7 @@ export default async function VendorStatusPage({
         <p className="mt-2 text-gray-600">
           The status link you used doesn&apos;t match any project. If KDP
           regenerated your project&apos;s link, only the newest emailed link
-          works — check your inbox for the most recent message from the KDP
+          works. Check your inbox for the most recent message from the KDP
           Mail Program, or reply to it if you can&apos;t find the link.
         </p>
       </Shell>
@@ -104,7 +104,7 @@ export default async function VendorStatusPage({
           </h1>
           <p className="mt-1 text-sm text-gray-600">
             {officeLabel(project.office as Office)}
-            {project.districtDetail ? ` — ${project.districtDetail}` : ""} ·{" "}
+            {project.districtDetail ? ` · ${project.districtDetail}` : ""} ·{" "}
             {project.pieceCount.toLocaleString()} pieces ·{" "}
             {formatMoney(project.totalCostCents)}
           </p>
@@ -140,7 +140,7 @@ export default async function VendorStatusPage({
           </h2>
           <p className="mt-1 mb-6 text-sm text-gray-600">
             The form is pre-filled with your current submission. Change what
-            was requested — any file you don&apos;t replace carries over
+            was requested. Any file you don&apos;t replace carries over
             unchanged.
           </p>
           <ProjectForm
@@ -186,7 +186,7 @@ export default async function VendorStatusPage({
 
       <section className="mt-8">
         <h2 className="mb-3 text-lg font-semibold text-gray-900">
-          Artwork (version {currentVersion?.versionNumber ?? "—"})
+          Artwork (version {currentVersion?.versionNumber ?? "-"})
         </h2>
         {artworkUrls.length === 0 ? (
           <p className="text-gray-600">No artwork on file.</p>
@@ -203,7 +203,7 @@ export default async function VendorStatusPage({
                   alt={artworkLabel(file.kind as UploadKind)}
                 />
                 <figcaption className="mt-1 text-sm text-gray-600">
-                  {artworkLabel(file.kind as UploadKind)} — {file.originalFilename}
+                  {artworkLabel(file.kind as UploadKind)} - {file.originalFilename}
                 </figcaption>
               </figure>
             ))}
@@ -276,7 +276,7 @@ export default async function VendorStatusPage({
       </section>
 
       <footer className="mt-10 border-t border-gray-200 pt-4 text-sm text-gray-500">
-        Bookmark this page — it&apos;s your private status link for this mail
+        Bookmark this page. It&apos;s your private status link for this mail
         piece. Questions? Reply to any email from the KDP Mail Program.
       </footer>
     </Shell>

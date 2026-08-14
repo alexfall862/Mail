@@ -4,7 +4,7 @@ import { listAdmins } from "@/lib/admin-users";
 import { formatDateTime } from "@/lib/format";
 import { UserManager } from "./user-manager";
 
-export const metadata = { title: "Admin users — KDP Mail Approval" };
+export const metadata = { title: "Admin users - KDP Mail Approval" };
 export const dynamic = "force-dynamic";
 
 export default async function UsersPage() {
@@ -17,7 +17,7 @@ export default async function UsersPage() {
     <div>
       <h1 className="text-2xl font-bold text-gray-900">Admin users</h1>
       <p className="mt-1 text-sm text-gray-600">
-        New and reset accounts get a temporary password shown once — hand it
+        New and reset accounts get a temporary password shown once. Hand it
         over out-of-band. A password change is forced at first sign-in.
       </p>
       <UserManager

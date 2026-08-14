@@ -369,7 +369,7 @@ export function ProjectForm(props: ProjectFormProps) {
   if (done) {
     return (
       <p className="rounded-md bg-green-50 p-4 text-green-800">
-        Revision submitted — refreshing the page…
+        Revision submitted. Refreshing the page…
       </p>
     );
   }
@@ -641,7 +641,7 @@ export function ProjectForm(props: ProjectFormProps) {
         </div>
         <p className="text-sm text-gray-600">
           Accepted: JPEG, PNG, WebP, or PDF. Artwork is reduced to review
-          quality in your browser before upload — your print-ready originals
+          quality in your browser before upload. Your print-ready originals
           never leave your computer.
           {artworkMode === "combined" &&
             " A multi-page PDF is split automatically: page 1 becomes the front, page 2 the back."}

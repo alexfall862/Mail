@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-export const metadata = { title: "Submission received — KDP Mail Approval" };
+export const metadata = { title: "Submission received - KDP Mail Approval" };
 
 export default function SubmitSuccessPage() {
   return (
@@ -10,7 +10,7 @@ export default function SubmitSuccessPage() {
         Submission received
       </h1>
       <p className="mt-3 text-gray-600">
-        Thanks — your mail piece is in the review queue. We&apos;ve emailed
+        Thanks. Your mail piece is in the review queue. We&apos;ve emailed
         your primary contact a <strong>private status link</strong>. Bookmark
         it: it&apos;s how you check progress and send revisions if changes are
         requested. You&apos;ll also get an email at every step.

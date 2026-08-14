@@ -8,7 +8,7 @@ import {
   type ProjectStatus,
 } from "@/lib/state-machine";
 
-export const metadata = { title: "Dashboard — KDP Mail Approval" };
+export const metadata = { title: "Dashboard - KDP Mail Approval" };
 export const dynamic = "force-dynamic";
 
 const TERMINAL: ProjectStatus[] = ["approved", "denied"];
@@ -131,7 +131,7 @@ export default async function AdminDashboardPage({
                   </td>
                   <td className="px-4 py-3">
                     {row.paidNeeded === 0 ? (
-                      <span className="text-gray-400">—</span>
+                      <span className="text-gray-400">-</span>
                     ) : (
                       <span
                         className={`rounded-full px-2 py-0.5 text-xs font-medium ${

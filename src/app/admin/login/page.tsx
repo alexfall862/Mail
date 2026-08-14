@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { getSessionAdmin } from "@/lib/auth";
 import { LoginForm } from "./login-form";
 
-export const metadata = { title: "Admin login — KDP Mail Approval" };
+export const metadata = { title: "Admin login - KDP Mail Approval" };
 
 export default async function LoginPage() {
   const session = await getSessionAdmin();

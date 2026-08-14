@@ -112,7 +112,7 @@ export async function verifyClaimedFile(
     return {
       ok: false,
       message:
-        "An uploaded file could not be found in storage — its upload may have expired. Please re-attach it and try again.",
+        "An uploaded file could not be found in storage. Its upload may have expired. Please re-attach it and try again.",
     };
   }
   if (head.sizeBytes !== file.sizeBytes || head.sizeBytes > maxBytesFor(file.kind)) {

@@ -28,7 +28,7 @@ export class ArtworkError extends Error {}
 
 /** §6 step 4. */
 const TOO_SMALL_MESSAGE =
-  "image too small to review — please upload a larger file";
+  "Image too small to review. Please upload a larger file.";
 
 /**
  * Process a separate-mode front or back file (image or PDF page 1).

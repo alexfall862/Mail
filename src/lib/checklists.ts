@@ -17,13 +17,20 @@ export const STAGE_CHECKLISTS: Record<
   ],
   campaign_review: [
     { key: "campaign_signoff", label: "Campaign has signed off on the piece" },
-    { key: "contact_confirmed", label: "Campaign contact reached and confirmed" },
-    { key: "messaging_accurate", label: "Messaging matches campaign guidance" },
   ],
   legal_review: [
-    { key: "disclaimer_compliant", label: "Disclaimer legally compliant" },
-    { key: "permit_indicia_correct", label: "Permit / indicia correct" },
-    { key: "funding_source_ok", label: "Funding source OK" },
+    {
+      key: "clears_federal_requirements",
+      label: "Clears Federal requirements (if applicable)",
+    },
+    {
+      key: "clears_state_requirements",
+      label: "Clears State requirements (if applicable)",
+    },
+    {
+      key: "funds_allocation_approved",
+      label: "State and Federal Funds Allocation Approved",
+    },
   ],
   final_review: [
     { key: "mail_date_feasible", label: "Mail date feasible" },

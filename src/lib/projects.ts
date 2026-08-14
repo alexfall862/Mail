@@ -308,7 +308,7 @@ export async function resubmitProject(
         if (!fieldsChanged && !contactsChanged && !filesChanged && !vendorNote) {
           return fail(
             400,
-            "Nothing changed — update a field or file, or add a note for the reviewers.",
+            "Nothing changed. Update a field or file, or add a note for the reviewers.",
           );
         }
 
