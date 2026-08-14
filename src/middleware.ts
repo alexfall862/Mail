@@ -8,16 +8,28 @@ import { NextResponse, type NextRequest } from "next/server";
 import { SESSION_COOKIE } from "@/lib/session-cookie";
 
 export function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl;
-  if (pathname === "/admin/login") return NextResponse.next();
+  // §13: enforce HTTPS behind Railway's proxy (TLS terminates upstream).
+  if (
+    process.env.NODE_ENV === "production" &&
+    request.headers.get("x-forwarded-proto") === "http"
+  ) {
+    const httpsUrl = new URL(request.url);
+    httpsUrl.protocol = "https:";
+    return NextResponse.redirect(httpsUrl, 308);
+  }
 
-  if (!request.cookies.get(SESSION_COOKIE)?.value) {
-    const login = new URL("/admin/login", request.url);
-    return NextResponse.redirect(login);
+  const { pathname } = request.nextUrl;
+  if (pathname.startsWith("/admin")) {
+    if (pathname === "/admin/login") return NextResponse.next();
+    if (!request.cookies.get(SESSION_COOKIE)?.value) {
+      const login = new URL("/admin/login", request.url);
+      return NextResponse.redirect(login);
+    }
   }
   return NextResponse.next();
 }
 
 export const config = {
-  matcher: ["/admin/:path*"],
+  // Everything except static assets — the https redirect must be global.
+  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
 };
