@@ -2,7 +2,7 @@ import { headers } from "next/headers";
 import { ArtworkImage } from "@/components/lightbox";
 import { ProjectForm } from "@/components/project-form";
 import { Timeline } from "@/components/timeline";
-import { formatDate, formatDateTime, formatMoney } from "@/lib/format";
+import { formatDate, formatDateTime } from "@/lib/format";
 import { getVendorProjectView } from "@/lib/projects";
 import { rateLimit } from "@/lib/rate-limit";
 import { presignGet } from "@/lib/r2";
@@ -105,8 +105,7 @@ export default async function VendorStatusPage({
           <p className="mt-1 text-sm text-gray-600">
             {officeLabel(project.office as Office)}
             {project.districtDetail ? ` · ${project.districtDetail}` : ""} ·{" "}
-            {project.pieceCount.toLocaleString()} pieces ·{" "}
-            {formatMoney(project.totalCostCents)}
+            {project.pieceCount.toLocaleString()} pieces
           </p>
           <p className="mt-1 text-sm text-gray-600">
             Mail date: <strong>{formatDate(project.mailDate)}</strong>
@@ -277,7 +276,7 @@ export default async function VendorStatusPage({
 
       <footer className="mt-10 border-t border-gray-200 pt-4 text-sm text-gray-500">
         Bookmark this page. It&apos;s your private status link for this mail
-        piece. Questions? Reply to any email from the KDP Mail Program.
+        piece.
       </footer>
     </Shell>
   );

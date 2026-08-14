@@ -44,7 +44,7 @@ function wrap(opts: {
   magicLink?: string | null;
 }): { html: string } {
   const footer = opts.magicLink
-    ? `<p style="${styles.footer}">Check status anytime: <a href="${esc(opts.magicLink)}">${esc(opts.magicLink)}</a><br/>This private link is your key to this project. Please don't forward it.</p>`
+    ? `<p style="${styles.footer}">Check status anytime: <a href="${esc(opts.magicLink)}">${esc(opts.magicLink)}</a></p>`
     : `<p style="${styles.footer}">KDP Mail Program internal notification.</p>`;
   return {
     html: `<!doctype html><html><body style="${styles.body}"><div style="${styles.card}"><h1 style="${styles.h1}">${esc(opts.heading)}</h1>${opts.bodyHtml}${footer}</div></body></html>`,
