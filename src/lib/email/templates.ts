@@ -255,6 +255,37 @@ export function vendorLinkRegenerated(
   };
 }
 
+/* --------------------------- campaign review request (admin-triggered) */
+export function campaignReviewRequest(
+  p: ProjectSummary,
+  primaryOrgs: string[],
+  magicLink: string | null,
+): EmailContent {
+  const partners =
+    primaryOrgs.length > 0 ? primaryOrgs.join(" and ") : "our mail vendors";
+  const subject = subj(
+    `Please review: mail piece supporting ${p.candidateSupported}`,
+  );
+  const reviewButton = magicLink
+    ? `<p style="${styles.p}"><a href="${esc(magicLink)}" style="${styles.button}">Review the mail piece</a></p>`
+    : "";
+  const bodyHtml =
+    `<p style="${styles.p}">Congratulations. The Kansas Democratic Party has decided to invest in your race and will be printing and mailing a mail piece in support of your campaign.</p>` +
+    `<p style="${styles.p}">We would like you to review it for any content that is not accurate, and to otherwise be aware that this mailer is currently scheduled to be sent on <strong>${esc(p.mailDateFormatted)}</strong>, working with ${esc(partners)}.</p>` +
+    reviewButton;
+  const text =
+    `Congratulations. The Kansas Democratic Party has decided to invest in your race and will be printing and mailing a mail piece in support of your campaign.\n\n` +
+    `We would like you to review it for any content that is not accurate, and to otherwise be aware that this mailer is currently scheduled to be sent on ${p.mailDateFormatted}, working with ${partners}.` +
+    (magicLink ? `\n\nReview the mail piece: ${magicLink}` : "") +
+    vendorFooterText(magicLink);
+  return {
+    template: "campaign_review_request",
+    subject,
+    ...wrap({ heading: "Please review this mail piece", bodyHtml, magicLink }),
+    text,
+  };
+}
+
 /* ------------------------------------------- §5 row 10 (admin notice) */
 export function adminReopened(
   p: ProjectSummary,

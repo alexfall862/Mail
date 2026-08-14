@@ -91,6 +91,7 @@ export type ProjectEmailContext = {
   magicLink: string | null;
   adminUrl: string;
   primaries: string[];
+  campaignContactEmail: string;
 };
 
 /** Load everything the templates need for a project, post-commit. */
@@ -112,5 +113,6 @@ export async function projectEmailContext(
     magicLink: raw ? vendorLinkUrl(raw) : null,
     adminUrl: `${process.env.APP_URL}/admin/projects/${project.id}`,
     primaries: await primaryContactEmails(projectId),
+    campaignContactEmail: project.campaignContactEmail,
   };
 }

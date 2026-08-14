@@ -154,6 +154,54 @@ export function ReviewPanel({
   );
 }
 
+export function CampaignReviewEmailButton({
+  projectId,
+  contactName,
+  contactEmail,
+}: {
+  projectId: string;
+  contactName: string;
+  contactEmail: string;
+}) {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <button
+        type="button"
+        disabled={busy}
+        onClick={async () => {
+          if (
+            !window.confirm(
+              `Email ${contactName} (${contactEmail}) asking the campaign to review this piece? The email includes the status link and the scheduled mail date.`,
+            )
+          )
+            return;
+          setBusy(true);
+          setMessage(null);
+          const result = await postJson(
+            `/api/admin/projects/${projectId}/campaign-review-request`,
+            {},
+          );
+          setBusy(false);
+          setMessage(
+            result.ok
+              ? `Review request sent to ${contactEmail}.`
+              : (result.message ?? "Send failed."),
+          );
+          router.refresh();
+        }}
+        className="rounded-md border border-cyan-600 bg-white px-3 py-1.5 text-sm font-medium text-cyan-800 hover:bg-cyan-50 disabled:opacity-50"
+      >
+        {busy ? "Sending…" : "Email campaign for review"}
+      </button>
+      {message && <span className="text-xs text-gray-600">{message}</span>}
+    </div>
+  );
+}
+
 export function PaidCheckbox({
   projectId,
   contactId,

@@ -152,7 +152,8 @@ export default async function VendorStatusPage({
                 office: project.office as Office,
                 districtDetail: project.districtDetail ?? undefined,
                 pieceCount: project.pieceCount,
-                totalCostCents: project.totalCostCents,
+                // totalCostCents deliberately omitted: the vendor quote must
+                // not appear anywhere in this page (campaigns get this link).
                 postOfficeLocation: project.postOfficeLocation,
                 permitNumber: project.permitNumber,
                 mailDate: project.mailDate,

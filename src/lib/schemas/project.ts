@@ -61,8 +61,7 @@ export function todayInKansas(): string {
   return new Date().toLocaleDateString("en-CA", { timeZone: "America/Chicago" });
 }
 
-export const projectFieldsSchema = z
-  .object({
+const baseProjectFields = z.object({
     candidateSupported: z
       .string()
       .trim()
@@ -96,27 +95,43 @@ export const projectFieldsSchema = z
       .max(200),
     campaignContactEmail: z.email("Enter a valid campaign contact email."),
     campaignContactPhone: z.string().trim().max(50).optional(),
-  })
-  .superRefine((data, ctx) => {
-    if (
-      DISTRICT_REQUIRED_OFFICES.includes(data.office) &&
-      !data.districtDetail?.trim()
-    ) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["districtDetail"],
-        message: `${DISTRICT_DETAIL_LABEL} is required for this office.`,
-      });
-    }
-    if (data.mailDate < todayInKansas()) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["mailDate"],
-        message: "Mail date must be today or later.",
-      });
-    }
   });
+
+function refineProjectFields(
+  data: { office: Office; districtDetail?: string; mailDate: string },
+  ctx: z.RefinementCtx,
+): void {
+  if (
+    DISTRICT_REQUIRED_OFFICES.includes(data.office) &&
+    !data.districtDetail?.trim()
+  ) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["districtDetail"],
+      message: `${DISTRICT_DETAIL_LABEL} is required for this office.`,
+    });
+  }
+  if (data.mailDate < todayInKansas()) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["mailDate"],
+      message: "Mail date must be today or later.",
+    });
+  }
+}
+
+export const projectFieldsSchema = baseProjectFields.superRefine(refineProjectFields);
 export type ProjectFields = z.infer<typeof projectFieldsSchema>;
+
+/**
+ * Resubmission variant: total cost is optional and the pre-filled form leaves
+ * it blank, so the vendor's quoted price never appears on the status page
+ * (campaigns get that link). Omitted cost carries the current value forward.
+ */
+export const resubmitProjectFieldsSchema = baseProjectFields
+  .extend({ totalCostCents: baseProjectFields.shape.totalCostCents.optional() })
+  .superRefine(refineProjectFields);
+export type ResubmitProjectFields = z.infer<typeof resubmitProjectFieldsSchema>;
 
 export const contactSchema = z.object({
   role: z.enum(VENDOR_ROLE_VALUES),
@@ -168,7 +183,7 @@ export type SubmitRequest = z.infer<typeof submitRequestSchema>;
 
 export const resubmitRequestSchema = z.object({
   vendorToken: z.string().min(1),
-  project: projectFieldsSchema,
+  project: resubmitProjectFieldsSchema,
   contacts: contactsSchema,
   /** Newly uploaded files for this version. */
   uploads: z.array(fileClaimSchema).max(4),

@@ -3,6 +3,7 @@ import {
   adminNewSubmission,
   adminReopened,
   adminResubmission,
+  campaignReviewRequest,
   vendorApproved,
   vendorChangesRequested,
   vendorConfirmation,
@@ -35,6 +36,7 @@ function vendorTemplates(): EmailContent[] {
     vendorApproved(summary, MAGIC),
     vendorDenied(summary, "Because reasons", MAGIC),
     vendorLinkRegenerated(summary, MAGIC),
+    campaignReviewRequest(summary, ["Print Co", "Mail Co"], MAGIC),
   ];
 }
 
@@ -97,6 +99,15 @@ describe("email templates (§12)", () => {
     expect(kick.html).toContain("Line one\nLine &quot;two&quot; &amp; &lt;three&gt;");
     const denial = vendorDenied(summary, notes, MAGIC);
     expect(denial.text).toContain(notes);
+  });
+
+  it("campaign review request names the mail date and primary vendors", () => {
+    const t = campaignReviewRequest(summary, ["Print Co", "Mail Co"], MAGIC);
+    expect(t.text).toContain("has decided to invest in your race");
+    expect(t.text).toContain("scheduled to be sent on Oct 12, 2026");
+    expect(t.text).toContain("working with Print Co and Mail Co");
+    const noPartners = campaignReviewRequest(summary, [], MAGIC);
+    expect(noPartners.text).toContain("working with our mail vendors");
   });
 
   it("html-escapes user-controlled fields", () => {

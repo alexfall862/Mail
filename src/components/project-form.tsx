@@ -22,11 +22,12 @@ import {
   DISTRICT_REQUIRED_OFFICES,
   OFFICES,
   projectFieldsSchema,
+  resubmitProjectFieldsSchema,
   VENDOR_ROLES,
   type ContactInput,
   type FileClaim,
   type Office,
-  type ProjectFields,
+  type ResubmitProjectFields,
   type VendorRole,
 } from "@/lib/schemas/project";
 import type { PresignRequest } from "@/lib/schemas/uploads";
@@ -38,7 +39,9 @@ const MAX_INVOICE_BYTES = 10 * 1024 * 1024;
 type ArtworkMode = "separate" | "combined";
 
 export type ProjectFormInitial = {
-  project: ProjectFields;
+  /** Total cost is intentionally absent: the status page must never carry
+   * the vendor's quote (campaigns view it via the same link). */
+  project: ResubmitProjectFields;
   contacts: ContactInput[];
   /** Kinds present on the current version (drives carry-forward UI). */
   currentKinds: UploadKind[];
@@ -83,7 +86,10 @@ export function ProjectForm(props: ProjectFormProps) {
     office: (initial?.project.office ?? "") as Office | "",
     districtDetail: initial?.project.districtDetail ?? "",
     pieceCount: initial ? String(initial.project.pieceCount) : "",
-    totalCost: initial ? (initial.project.totalCostCents / 100).toFixed(2) : "",
+    totalCost:
+      initial?.project.totalCostCents != null
+        ? (initial.project.totalCostCents / 100).toFixed(2)
+        : "",
     postOfficeLocation: initial?.project.postOfficeLocation ?? "",
     permitNumber: initial?.project.permitNumber ?? "",
     mailDate: initial?.project.mailDate ?? "",
@@ -131,19 +137,25 @@ export function ProjectForm(props: ProjectFormProps) {
     setContacts((cs) => cs.map((c) => (c.role === role ? { ...c, ...patch } : c)));
   }
 
-  function buildProjectFields(): ProjectFields | string {
+  function buildProjectFields(): ResubmitProjectFields | string {
     const pieceCount = Number(fields.pieceCount);
-    const dollars = Number(fields.totalCost);
-    if (!Number.isFinite(dollars) || fields.totalCost.trim() === "") {
+    const costProvided = fields.totalCost.trim() !== "";
+    if (props.mode === "new" && !costProvided) {
       return "Enter the total cost in dollars.";
     }
-    const candidate: ProjectFields = {
+    let totalCostCents: number | undefined;
+    if (costProvided) {
+      const dollars = Number(fields.totalCost);
+      if (!Number.isFinite(dollars)) return "Enter the total cost in dollars.";
+      totalCostCents = Math.round(dollars * 100);
+    }
+    const candidate: ResubmitProjectFields = {
       candidateSupported: fields.candidateSupported,
       description: fields.description,
       office: (fields.office || "other") as Office,
       districtDetail: fields.districtDetail || undefined,
       pieceCount: Number.isFinite(pieceCount) ? pieceCount : 0,
-      totalCostCents: Math.round(dollars * 100),
+      totalCostCents,
       postOfficeLocation: fields.postOfficeLocation,
       permitNumber: fields.permitNumber,
       mailDate: fields.mailDate,
@@ -152,7 +164,9 @@ export function ProjectForm(props: ProjectFormProps) {
       campaignContactPhone: fields.campaignContactPhone || undefined,
     };
     if (!fields.office) return "Select the office.";
-    const parsed = projectFieldsSchema.safeParse(candidate);
+    const schema =
+      props.mode === "new" ? projectFieldsSchema : resubmitProjectFieldsSchema;
+    const parsed = schema.safeParse(candidate);
     if (!parsed.success) return parsed.error.issues[0]?.message ?? "Check the form fields.";
     return parsed.data;
   }
@@ -448,7 +462,7 @@ export function ProjectForm(props: ProjectFormProps) {
           </div>
           <div>
             <label htmlFor="cost" className={labelCls}>
-              Total cost (USD) *
+              Total cost (USD) {props.mode === "new" ? "*" : ""}
             </label>
             <input
               id="cost"
@@ -459,6 +473,11 @@ export function ProjectForm(props: ProjectFormProps) {
               value={fields.totalCost}
               onChange={(e) => setField("totalCost", e.target.value)}
             />
+            {props.mode === "resubmit" && (
+              <p className="mt-1 text-xs text-gray-500">
+                Leave blank to keep the current cost.
+              </p>
+            )}
           </div>
           <div>
             <label htmlFor="postoffice" className={labelCls}>

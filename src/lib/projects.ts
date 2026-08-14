@@ -293,6 +293,13 @@ export async function resubmitProject(
         }
         const artworkChanged = computeArtworkChanged(prevArtwork, nextArtwork);
 
+        // Omitted total cost (hidden on the resubmit form so campaigns with
+        // the link can't see the quote) carries the current value forward.
+        const resolvedFields: ProjectFields = {
+          ...input.project,
+          totalCostCents: input.project.totalCostCents ?? project.totalCostCents,
+        };
+
         // §5: at least one changed field/file or a non-empty vendor note.
         const vendorNote = input.vendorNote?.trim() ? input.vendorNote.trim() : null;
         const previousContacts = await tx
@@ -300,7 +307,7 @@ export async function resubmitProject(
           .from(contactsTable)
           .where(eq(contactsTable.projectId, projectId))
           .orderBy(asc(contactsTable.role));
-        const fieldsChanged = hasFieldChanges(project, input.project);
+        const fieldsChanged = hasFieldChanges(project, resolvedFields);
         const contactsChanged = hasContactChanges(previousContacts, input.contacts);
         const filesChanged =
           artworkChanged ||
@@ -360,7 +367,7 @@ export async function resubmitProject(
         await tx
           .update(projects)
           .set({
-            ...projectValues(input.project),
+            ...projectValues(resolvedFields),
             status: result.state.status,
             changesRequestedFrom: result.state.changesRequestedFrom,
             statusChangedAt: new Date(),

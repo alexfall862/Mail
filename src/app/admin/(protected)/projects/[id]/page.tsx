@@ -17,6 +17,7 @@ import {
 } from "@/lib/state-machine";
 import type { UploadKind } from "@/lib/uploads";
 import {
+  CampaignReviewEmailButton,
   DeleteProjectButton,
   PaidCheckbox,
   RegenerateLinkButton,
@@ -167,6 +168,15 @@ export default async function AdminProjectPage({
           <h2 className="mb-4 text-lg font-semibold text-gray-900">
             {STATUS_LABELS[status]} decision
           </h2>
+          {status === "campaign_review" && (
+            <div className="mb-5 border-b border-blue-200 pb-5">
+              <CampaignReviewEmailButton
+                projectId={project.id}
+                contactName={project.campaignContactName || "the campaign contact"}
+                contactEmail={project.campaignContactEmail}
+              />
+            </div>
+          )}
           <ReviewPanel projectId={project.id} stage={status} />
         </section>
       )}

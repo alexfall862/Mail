@@ -436,6 +436,19 @@ describe("resubmission routing rule (§5 row 7)", () => {
     if (!result.ok) expect(result.message).toMatch(/Nothing changed/);
   });
 
+  it("omitted total cost carries forward unchanged (price hidden from the resubmit form)", async () => {
+    const { projectId, rawToken } = await bounceAt("content_review");
+    const payload = resubmitPayload(rawToken, projectId, 2, {
+      carry: ["artwork_front", "artwork_back", "invoice"],
+      note: "Note only, cost omitted.",
+    });
+    delete (payload.project as { totalCostCents?: number }).totalCostCents;
+    const result = await resubmitProject(payload);
+    expect(result.ok).toBe(true);
+    const [project] = await db.select().from(projects).where(eq(projects.id, projectId));
+    expect(project!.totalCostCents).toBe(123456);
+  });
+
   it("a note alone is a valid resubmission and returns to the kicking stage", async () => {
     const { projectId, rawToken } = await bounceAt("content_review");
     const result = await resubmitProject(
