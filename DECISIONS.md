@@ -15,3 +15,9 @@ contradiction resolved by the implementer — flagged for explicit review.
 - Seed superuser's `name` is "Superuser" (spec specifies only email/password).
 - Money columns (`total_cost_cents`, `size_bytes`) use JS `number` mode (safe well past any realistic value).
 - Local dev Postgres: `postgres:16` on port 5432, db `kdp_mail`, creds postgres/postgres.
+
+## Phase 2 — State machine
+
+- After a superuser reopen (approved → final_review), the current version may already hold a final_review decision; re-deciding will upsert that `stage_reviews` row (the `unique (version_id, stage)` constraint stays intact, latest decision wins, and the full history remains in `events`). The spec doesn't address this corner.
+- Transition errors are typed (`invalid_transition` / `invalid_state` / `not_superuser` / `reason_required`); the concurrent-click loser message is "This project has already moved to {status label}."
+- Status labels centralized in the state machine module (`submitted` renders as "Received", per §8's vendor timeline).
