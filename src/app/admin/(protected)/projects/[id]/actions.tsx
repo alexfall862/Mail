@@ -47,43 +47,49 @@ function parseExtraCc(raw: string): string[] {
     .filter((e) => e !== "");
 }
 
-/** Recipient controls shared by admin-triggered outgoing emails. */
+/** Recipient controls shared by admin-triggered outgoing emails, collapsed
+ * behind a labeled disclosure so each action's primary controls stand out. */
 function EmailOptionsFields({
+  label,
   ccAdmins,
   onCcAdmins,
   extraCc,
   onExtraCc,
 }: {
+  label: string;
   ccAdmins: boolean;
   onCcAdmins: (v: boolean) => void;
   extraCc: string;
   onExtraCc: (v: string) => void;
 }) {
   return (
-    <div className="space-y-2 rounded-md border border-gray-200 bg-white/60 p-3">
-      <p className="text-xs font-medium uppercase text-gray-500">
-        Email recipients
-      </p>
-      <label className="flex items-center gap-2 text-sm text-gray-700">
-        <input
-          type="checkbox"
-          checked={ccAdmins}
-          onChange={(e) => onCcAdmins(e.target.checked)}
-        />
-        CC the admin team
-      </label>
-      <div>
-        <label className="block text-xs font-medium text-gray-700">
-          Also include (comma-separated emails)
+    <details className="rounded-md border border-gray-200 bg-white/60">
+      <summary className="cursor-pointer select-none px-3 py-2 text-xs font-medium text-gray-600">
+        {label}
+        {ccAdmins ? " · CCing the admin team" : ""}
+      </summary>
+      <div className="space-y-2 border-t border-gray-100 px-3 py-3">
+        <label className="flex items-center gap-2 text-sm text-gray-700">
+          <input
+            type="checkbox"
+            checked={ccAdmins}
+            onChange={(e) => onCcAdmins(e.target.checked)}
+          />
+          CC the admin team
         </label>
-        <input
-          className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm"
-          placeholder="name@example.org, other@example.org"
-          value={extraCc}
-          onChange={(e) => onExtraCc(e.target.value)}
-        />
+        <div>
+          <label className="block text-xs font-medium text-gray-700">
+            Also include (comma-separated emails)
+          </label>
+          <input
+            className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm"
+            placeholder="name@example.org, other@example.org"
+            value={extraCc}
+            onChange={(e) => onExtraCc(e.target.value)}
+          />
+        </div>
       </div>
-    </div>
+    </details>
   );
 }
 
@@ -171,6 +177,7 @@ export function ReviewPanel({
         />
       </div>
       <EmailOptionsFields
+        label="Decision email to the vendor: CC options"
         ccAdmins={ccAdmins}
         onCcAdmins={setCcAdmins}
         extraCc={extraCc}
@@ -465,8 +472,8 @@ export function ReviewerNoticeButtons({
   return (
     <div className="max-w-xl space-y-3">
       <div>
-        <p className="text-xs font-medium uppercase text-gray-500">
-          {stageLabel} reviewers
+        <p className="text-sm font-medium text-gray-900">
+          Standing {stageLabel.toLowerCase()} reviewers
         </p>
         <ul className="mt-1 space-y-1">
           {contacts.map((c) => (
@@ -489,6 +496,7 @@ export function ReviewerNoticeButtons({
         </ul>
       </div>
       <EmailOptionsFields
+        label="Notice email: CC options"
         ccAdmins={ccAdmins}
         onCcAdmins={setCcAdmins}
         extraCc={extraCc}
@@ -550,6 +558,7 @@ export function CampaignReviewEmailButton({
   return (
     <div className="max-w-xl space-y-3">
       <EmailOptionsFields
+        label="Campaign email: CC options"
         ccAdmins={ccAdmins}
         onCcAdmins={setCcAdmins}
         extraCc={extraCc}

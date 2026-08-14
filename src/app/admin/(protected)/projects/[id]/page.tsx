@@ -172,38 +172,71 @@ export default async function AdminProjectPage({
         )}
       />
 
-      {/* Review panel for the current stage */}
-      {isReviewStage(status) && (
-        <section className="rounded-lg border border-blue-200 bg-blue-50/40 p-5">
-          <h2 className="mb-4 text-lg font-semibold text-gray-900">
-            {STATUS_LABELS[status]} decision
-          </h2>
-          {reviewerContactsFor(status).length > 0 && (
-            <div className="mb-5 border-b border-blue-200 pb-5">
-              <ReviewerNoticeButtons
-                projectId={project.id}
-                stageLabel={STATUS_LABELS[status]}
-                contacts={reviewerContactsFor(status)}
-              />
-            </div>
-          )}
-          {status === "campaign_review" && (
-            <div className="mb-5 border-b border-blue-200 pb-5">
-              {project.campaignContactEmail ? (
-                <CampaignReviewEmailButton
+      {/* Step 1 (optional): ask outside reviewers to look. Does not move the
+          project — kept visually separate from the decision card below. */}
+      {isReviewStage(status) &&
+        (reviewerContactsFor(status).length > 0 ||
+          status === "campaign_review") && (
+          <section className="rounded-lg border border-indigo-200 bg-indigo-50/40 p-5">
+            <h2 className="text-lg font-semibold text-gray-900">
+              Ask for outside review
+            </h2>
+            <p className="mt-1 text-sm text-gray-600">
+              Optional: send this piece to the people who review at this stage.
+              Sending a notice does <strong>not</strong> move the project.
+            </p>
+            <div className="mt-4 space-y-5">
+              {reviewerContactsFor(status).length > 0 && (
+                <ReviewerNoticeButtons
                   projectId={project.id}
-                  contactName={project.campaignContactName || "the campaign contact"}
-                  contactEmail={project.campaignContactEmail}
+                  stageLabel={STATUS_LABELS[status]}
+                  contacts={reviewerContactsFor(status)}
                 />
-              ) : (
-                <p className="text-sm text-amber-800">
-                  Set a campaign contact above to send the campaign review
-                  email.
-                </p>
               )}
+              {status === "campaign_review" &&
+                (project.campaignContactEmail ? (
+                  <div
+                    className={
+                      reviewerContactsFor(status).length > 0
+                        ? "border-t border-indigo-200 pt-5"
+                        : undefined
+                    }
+                  >
+                    <p className="mb-3 text-sm font-medium text-gray-900">
+                      Campaign contact
+                    </p>
+                    <CampaignReviewEmailButton
+                      projectId={project.id}
+                      contactName={
+                        project.campaignContactName || "the campaign contact"
+                      }
+                      contactEmail={project.campaignContactEmail}
+                    />
+                  </div>
+                ) : (
+                  <p className="text-sm text-amber-800">
+                    Set a campaign contact above to send the campaign review
+                    email.
+                  </p>
+                ))}
             </div>
-          )}
-          <ReviewPanel projectId={project.id} stage={status} />
+          </section>
+        )}
+
+      {/* Step 2: the decision — this is what moves the project. */}
+      {isReviewStage(status) && (
+        <section className="rounded-lg border border-blue-300 bg-blue-50/40 p-5">
+          <h2 className="text-lg font-semibold text-gray-900">
+            Record your decision: {STATUS_LABELS[status]}
+          </h2>
+          <p className="mt-1 text-sm text-gray-600">
+            This moves the project. Advance passes{" "}
+            {STATUS_LABELS[status].toLowerCase()}; Request changes and Deny
+            email your notes to the vendor.
+          </p>
+          <div className="mt-4">
+            <ReviewPanel projectId={project.id} stage={status} />
+          </div>
         </section>
       )}
       {status === "changes_requested" && (
