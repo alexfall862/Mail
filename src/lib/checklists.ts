@@ -15,6 +15,11 @@ export const STAGE_CHECKLISTS: Record<
     { key: "candidate_info_accurate", label: "Candidate information accurate" },
     { key: "imagery_appropriate", label: "Imagery appropriate" },
   ],
+  campaign_review: [
+    { key: "campaign_signoff", label: "Campaign has signed off on the piece" },
+    { key: "contact_confirmed", label: "Campaign contact reached and confirmed" },
+    { key: "messaging_accurate", label: "Messaging matches campaign guidance" },
+  ],
   legal_review: [
     { key: "disclaimer_compliant", label: "Disclaimer legally compliant" },
     { key: "permit_indicia_correct", label: "Permit / indicia correct" },

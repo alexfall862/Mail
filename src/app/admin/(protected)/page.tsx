@@ -25,6 +25,7 @@ function isUrgent(status: ProjectStatus, mailDate: string): boolean {
 const STATUS_BADGE: Record<ProjectStatus, string> = {
   submitted: "bg-gray-100 text-gray-800",
   content_review: "bg-blue-100 text-blue-800",
+  campaign_review: "bg-cyan-100 text-cyan-800",
   legal_review: "bg-indigo-100 text-indigo-800",
   final_review: "bg-purple-100 text-purple-800",
   changes_requested: "bg-amber-100 text-amber-800",

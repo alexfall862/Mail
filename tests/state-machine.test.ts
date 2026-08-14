@@ -58,7 +58,8 @@ describe("creation (§5 rows 1–2)", () => {
 
 describe("advance decisions (§5 rows 3–5)", () => {
   const expected: Array<[ReviewStage, ProjectStatus]> = [
-    ["content_review", "legal_review"], // row 3
+    ["content_review", "campaign_review"], // row 3 (campaign stage added 2026-08-14)
+    ["campaign_review", "legal_review"],
     ["legal_review", "final_review"], // row 4
     ["final_review", "approved"], // row 5
   ];
@@ -285,16 +286,20 @@ describe("whitelist exhaustiveness — no undeclared (from → to) edge is reach
   // ever come out of `transition` with ok: true.
   const allowedEdges = new Set([
     "submitted→content_review", // row 2
-    "content_review→legal_review", // row 3
+    "content_review→campaign_review", // row 3 (campaign stage added 2026-08-14)
+    "campaign_review→legal_review",
     "legal_review→final_review", // row 4
     "final_review→approved", // row 5
     "content_review→changes_requested", // row 6
+    "campaign_review→changes_requested",
     "legal_review→changes_requested",
     "final_review→changes_requested",
     "changes_requested→content_review", // row 7 (artwork branch + non-artwork from content)
+    "changes_requested→campaign_review", // row 7 (non-artwork branch)
     "changes_requested→legal_review", // row 7 (non-artwork branch)
     "changes_requested→final_review", // row 7 (non-artwork branch)
     "content_review→denied", // row 8
+    "campaign_review→denied",
     "legal_review→denied",
     "final_review→denied",
     "approved→final_review", // row 10

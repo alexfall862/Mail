@@ -68,6 +68,11 @@ function projectValues(fields: ProjectFields) {
     postOfficeLocation: fields.postOfficeLocation,
     permitNumber: fields.permitNumber,
     mailDate: fields.mailDate,
+    campaignContactName: fields.campaignContactName,
+    campaignContactEmail: fields.campaignContactEmail.toLowerCase(),
+    campaignContactPhone: fields.campaignContactPhone?.trim()
+      ? fields.campaignContactPhone.trim()
+      : null,
   };
 }
 
@@ -432,10 +437,16 @@ function hasFieldChanges(
     postOfficeLocation: string;
     permitNumber: string;
     mailDate: string;
+    campaignContactName: string;
+    campaignContactEmail: string;
+    campaignContactPhone: string | null;
   },
   next: ProjectFields,
 ): boolean {
   const nextDistrict = next.districtDetail?.trim() ? next.districtDetail.trim() : null;
+  const nextCampaignPhone = next.campaignContactPhone?.trim()
+    ? next.campaignContactPhone.trim()
+    : null;
   return (
     current.candidateSupported !== next.candidateSupported ||
     current.description !== next.description ||
@@ -445,7 +456,10 @@ function hasFieldChanges(
     current.totalCostCents !== next.totalCostCents ||
     current.postOfficeLocation !== next.postOfficeLocation ||
     current.permitNumber !== next.permitNumber ||
-    current.mailDate !== next.mailDate
+    current.mailDate !== next.mailDate ||
+    current.campaignContactName !== next.campaignContactName ||
+    current.campaignContactEmail !== next.campaignContactEmail.toLowerCase() ||
+    current.campaignContactPhone !== nextCampaignPhone
   );
 }
 

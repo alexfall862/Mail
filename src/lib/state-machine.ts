@@ -8,6 +8,7 @@
 export const PROJECT_STATUSES = [
   "submitted",
   "content_review",
+  "campaign_review",
   "legal_review",
   "final_review",
   "changes_requested",
@@ -18,6 +19,7 @@ export type ProjectStatus = (typeof PROJECT_STATUSES)[number];
 
 export const REVIEW_STAGES = [
   "content_review",
+  "campaign_review",
   "legal_review",
   "final_review",
 ] as const;
@@ -38,6 +40,7 @@ export function isReviewStage(status: ProjectStatus): status is ReviewStage {
 export const STATUS_LABELS: Record<ProjectStatus, string> = {
   submitted: "Received",
   content_review: "Content Review",
+  campaign_review: "Campaign Review",
   legal_review: "Legal Review",
   final_review: "Final Review",
   changes_requested: "Changes Requested",
@@ -50,9 +53,11 @@ export const CREATED_STATUS: ProjectStatus = "submitted";
 /** Row 2: creation auto-advances here in the same transaction. */
 export const POST_CREATION_STATUS: ProjectStatus = "content_review";
 
-/** Rows 3–5: where an `advanced` decision at each stage leads. */
+/** Where an `advanced` decision at each stage leads (§5 rows 3–5, amended
+ * 2026-08-14 to insert campaign_review after content_review). */
 const ADVANCE_TARGET: Record<ReviewStage, ProjectStatus> = {
-  content_review: "legal_review",
+  content_review: "campaign_review",
+  campaign_review: "legal_review",
   legal_review: "final_review",
   final_review: "approved",
 };

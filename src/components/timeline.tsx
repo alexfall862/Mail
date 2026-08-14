@@ -8,6 +8,7 @@ import type { ProjectStatus, ReviewStage } from "@/lib/state-machine";
 const STEPS: Array<{ key: ProjectStatus; label: string }> = [
   { key: "submitted", label: "Received" },
   { key: "content_review", label: "Content Review" },
+  { key: "campaign_review", label: "Campaign Review" },
   { key: "legal_review", label: "Legal Review" },
   { key: "final_review", label: "Final Review" },
   { key: "approved", label: "Approved" },
@@ -16,9 +17,10 @@ const STEPS: Array<{ key: ProjectStatus; label: string }> = [
 const STEP_INDEX: Partial<Record<ProjectStatus, number>> = {
   submitted: 0,
   content_review: 1,
-  legal_review: 2,
-  final_review: 3,
-  approved: 4,
+  campaign_review: 2,
+  legal_review: 3,
+  final_review: 4,
+  approved: 5,
 };
 
 export type TimelineProps = {

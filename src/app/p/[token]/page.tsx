@@ -157,6 +157,9 @@ export default async function VendorStatusPage({
                 postOfficeLocation: project.postOfficeLocation,
                 permitNumber: project.permitNumber,
                 mailDate: project.mailDate,
+                campaignContactName: project.campaignContactName,
+                campaignContactEmail: project.campaignContactEmail,
+                campaignContactPhone: project.campaignContactPhone ?? undefined,
               },
               contacts: contacts.map((c) => ({
                 role: c.role as VendorRole,

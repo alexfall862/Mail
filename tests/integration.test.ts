@@ -106,6 +106,9 @@ function baseSubmit(projectId: string): SubmitRequest {
       postOfficeLocation: "Topeka, KS",
       permitNumber: "PERMIT-1",
       mailDate: "2030-01-15",
+      campaignContactName: "Casey Campaign",
+      campaignContactEmail: "casey@campaign.example",
+      campaignContactPhone: "785-555-0100",
     },
     contacts: [
       {
@@ -247,9 +250,14 @@ describe("creation (§5 rows 1–2)", () => {
 });
 
 describe("review lifecycle (§5 rows 3–5, 8)", () => {
-  it("advances content → legal → final → approved with stage_reviews rows", async () => {
+  it("advances content → campaign → legal → final → approved with stage_reviews rows", async () => {
     const { projectId } = await makeProject();
-    for (const stage of ["content_review", "legal_review", "final_review"] as const) {
+    for (const stage of [
+      "content_review",
+      "campaign_review",
+      "legal_review",
+      "final_review",
+    ] as const) {
       const result = await decideReview({
         projectId,
         stage,
@@ -266,7 +274,7 @@ describe("review lifecycle (§5 rows 3–5, 8)", () => {
       .select()
       .from(stageReviews)
       .where(eq(stageReviews.projectId, projectId));
-    expect(reviews).toHaveLength(3);
+    expect(reviews).toHaveLength(4);
   });
 
   it("denies with notes at any stage (terminal)", async () => {
@@ -313,11 +321,11 @@ describe("review lifecycle (§5 rows 3–5, 8)", () => {
     const oks = [a.ok, b.ok].filter(Boolean);
     expect(oks).toHaveLength(1);
     const loser = a.ok ? b : a;
-    if (!loser.ok) expect(loser.message).toMatch(/already moved to Legal Review/);
+    if (!loser.ok) expect(loser.message).toMatch(/already moved to Campaign Review/);
 
     // No double transition: status advanced exactly one step, one review row.
     const [project] = await db.select().from(projects).where(eq(projects.id, projectId));
-    expect(project!.status).toBe("legal_review");
+    expect(project!.status).toBe("campaign_review");
     const reviews = await db
       .select()
       .from(stageReviews)
@@ -327,9 +335,16 @@ describe("review lifecycle (§5 rows 3–5, 8)", () => {
 });
 
 describe("resubmission routing rule (§5 row 7)", () => {
-  async function bounceAt(stage: "content_review" | "legal_review" | "final_review") {
+  async function bounceAt(
+    stage: "content_review" | "campaign_review" | "legal_review" | "final_review",
+  ) {
     const { projectId, rawToken } = await makeProject();
-    const advanceOrder = ["content_review", "legal_review", "final_review"] as const;
+    const advanceOrder = [
+      "content_review",
+      "campaign_review",
+      "legal_review",
+      "final_review",
+    ] as const;
     for (const s of advanceOrder) {
       if (s === stage) break;
       const r = await decideReview({
@@ -457,7 +472,12 @@ describe("resubmission routing rule (§5 row 7)", () => {
 describe("reopen (§5 row 10) and re-decide", () => {
   it("superuser reopens an approved project to final_review and can re-decide (upsert)", async () => {
     const { projectId } = await makeProject();
-    for (const stage of ["content_review", "legal_review", "final_review"] as const) {
+    for (const stage of [
+      "content_review",
+      "campaign_review",
+      "legal_review",
+      "final_review",
+    ] as const) {
       const r = await decideReview({ projectId, stage, decision: "advanced", checklist: {}, notes: null, adminId });
       expect(r.ok).toBe(true);
     }

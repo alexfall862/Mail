@@ -1,5 +1,10 @@
 # Implementation decisions
 
+## Post-spec amendments (requested 2026-08-14)
+
+- **Campaign Review stage** inserted between Content Review and Legal Review (pipeline: submitted → content → campaign → legal → final → approved). It behaves like every other review stage: advance / request changes / deny, one decision per stage per version, and the §5 resubmission routing rule unchanged (artwork change → content_review; otherwise back to the kicking stage, which can now be campaign_review). Advisory checklist keys: `campaign_signoff`, `contact_confirmed`, `messaging_accurate` (adjustable in `src/lib/checklists.ts`).
+- **Campaign contact fields** on the project: `campaign_contact_name` (required), `campaign_contact_email` (required), `campaign_contact_phone` (optional) — collected on the submission form, editable on resubmission, shown on the admin project page, included in CSV export. The campaign contact receives no system emails (informational only — say the word if they should be notified at campaign review).
+
 Minor choices the spec leaves open, one line each. Anything marked ⚠ is a spec
 contradiction resolved by the implementer — flagged for explicit review.
 

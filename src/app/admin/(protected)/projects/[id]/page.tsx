@@ -146,6 +146,14 @@ export default async function AdminProjectPage({
           }
         />
         <div className="sm:col-span-2 lg:col-span-3">
+          <p className="text-xs uppercase text-gray-500">Campaign contact</p>
+          <p className="mt-0.5 text-gray-900">
+            {project.campaignContactName || "—"}
+            {project.campaignContactEmail && ` · ${project.campaignContactEmail}`}
+            {project.campaignContactPhone && ` · ${project.campaignContactPhone}`}
+          </p>
+        </div>
+        <div className="sm:col-span-2 lg:col-span-3">
           <p className="text-xs uppercase text-gray-500">Description</p>
           <p className="mt-0.5 whitespace-pre-line text-gray-900">
             {project.description}

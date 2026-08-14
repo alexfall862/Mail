@@ -39,6 +39,9 @@ export async function GET(request: Request): Promise<NextResponse> {
     "created_at",
     "permit_number",
     "post_office_location",
+    "campaign_contact_name",
+    "campaign_contact_email",
+    "campaign_contact_phone",
   ];
   for (const role of VENDOR_ROLE_VALUES) {
     header.push(
@@ -82,6 +85,9 @@ export async function GET(request: Request): Promise<NextResponse> {
       p.createdAt.toISOString(),
       p.permitNumber,
       p.postOfficeLocation,
+      p.campaignContactName,
+      p.campaignContactEmail,
+      p.campaignContactPhone ?? "",
     ];
     for (const role of VENDOR_ROLE_VALUES) {
       const c = pContacts.find((x) => x.role === role);
@@ -116,6 +122,9 @@ export async function GET(request: Request): Promise<NextResponse> {
       (t.totalCostCents / 100).toFixed(2),
       t.mailDate,
       t.finalStatus,
+      "",
+      "",
+      "",
       "",
       "",
       "",

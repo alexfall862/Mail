@@ -41,6 +41,7 @@ export const officeType = pgEnum("office_type", [
 export const projectStatus = pgEnum("project_status", [
   "submitted",
   "content_review",
+  "campaign_review",
   "legal_review",
   "final_review",
   "changes_requested",
@@ -106,6 +107,13 @@ export const projects = pgTable(
     postOfficeLocation: text("post_office_location").notNull(),
     permitNumber: text("permit_number").notNull(),
     mailDate: date("mail_date").notNull(),
+
+    // Campaign contact point (post-spec amendment, 2026-08-14): who at the
+    // campaign signs off during campaign review. Default '' covers rows
+    // predating the column; the app requires name + email on submission.
+    campaignContactName: text("campaign_contact_name").notNull().default(""),
+    campaignContactEmail: text("campaign_contact_email").notNull().default(""),
+    campaignContactPhone: text("campaign_contact_phone"),
 
     status: projectStatus("status").notNull().default("submitted"),
     statusChangedAt: timestamp("status_changed_at", { withTimezone: true })
