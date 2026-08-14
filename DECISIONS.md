@@ -2,6 +2,8 @@
 
 ## Post-spec amendments (requested 2026-08-14)
 
+- **AI pre-check (advisory)**: on submission (post-response via Next's `after()`, so the vendor isn't delayed) and manually re-runnable during content review, `gpt-4.1` reviews the artwork via presigned GET URLs (bytes never transit the app server, §3 preserved) for three things: claims-with-citations (citations transcribed with click-to-search links), the "Paid for by Kansas Democratic Party" disclaimer, and spelling/grammar. Results/failures are `ai_review.*` events rendered as an advisory panel on the ticket; it never gates a transition. New optional env var `OPENAI_API_KEY` (§14 addition); `scripts/ai-review-smoke.ts` verifies the integration end to end.
+
 - **Campaign Review stage** inserted between Content Review and Legal Review (pipeline: submitted → content → campaign → legal → final → approved). It behaves like every other review stage: advance / request changes / deny, one decision per stage per version, and the §5 resubmission routing rule unchanged (artwork change → content_review; otherwise back to the kicking stage, which can now be campaign_review). Advisory checklist keys: `campaign_signoff`, `contact_confirmed`, `messaging_accurate` (adjustable in `src/lib/checklists.ts`).
 - **Campaign contact fields** on the project: `campaign_contact_name` (required), `campaign_contact_email` (required), `campaign_contact_phone` (optional) — collected on the submission form, editable on resubmission, shown on the admin project page, included in CSV export. The campaign contact receives no system emails (informational only — say the word if they should be notified at campaign review).
 

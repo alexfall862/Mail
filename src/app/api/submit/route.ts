@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { after } from "next/server";
+import { runAiReview } from "@/lib/ai-review";
 import { verifyDraftToken } from "@/lib/draft-token";
 import {
   activeAdminEmails,
@@ -62,6 +64,10 @@ export async function POST(request: Request): Promise<NextResponse> {
       adminNewSubmission(ctx.summary, ctx.adminUrl),
     );
   }
+
+  // AI pre-check kicks off after the response is sent, so the vendor isn't
+  // kept waiting; the outcome lands in the event timeline for the admin team.
+  after(() => runAiReview(projectId, { trigger: "submission" }));
 
   return NextResponse.json({ ok: true });
 }

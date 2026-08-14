@@ -62,6 +62,12 @@ const ADVANCE_TARGET: Record<ReviewStage, ProjectStatus> = {
   final_review: "approved",
 };
 
+/** Where an `advanced` decision at this stage leads (UI labels the button
+ * with the destination, most prominently the final approve). */
+export function advanceTarget(stage: ReviewStage): ProjectStatus {
+  return ADVANCE_TARGET[stage];
+}
+
 /** The slice of a project row the state machine reasons about. */
 export type ProjectState = {
   status: ProjectStatus;

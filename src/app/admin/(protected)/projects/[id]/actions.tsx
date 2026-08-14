@@ -10,7 +10,11 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { STAGE_CHECKLISTS } from "@/lib/checklists";
-import type { ReviewStage } from "@/lib/state-machine";
+import {
+  advanceTarget,
+  STATUS_LABELS,
+  type ReviewStage,
+} from "@/lib/state-machine";
 
 async function postJson(
   url: string,
@@ -115,6 +119,9 @@ export function ReviewPanel({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
+  const target = advanceTarget(stage);
+  const isFinalApprove = target === "approved";
+
   async function decide(decision: "advanced" | "changes_requested" | "denied") {
     setError(null);
     if ((decision === "changes_requested" || decision === "denied") && !notes.trim()) {
@@ -140,6 +147,17 @@ export function ReviewPanel({
       !notifyVendor &&
       !window.confirm(
         "Request changes WITHOUT emailing the vendor? They won't be notified; your notes appear only on their status page.",
+      )
+    ) {
+      return;
+    }
+    if (
+      decision === "advanced" &&
+      isFinalApprove &&
+      !window.confirm(
+        notifyVendor
+          ? "APPROVE this mail piece? This is the final step: the piece is cleared to print and mail, and the vendor is emailed that approval."
+          : "APPROVE this mail piece WITHOUT emailing the vendor? The piece is cleared to print and mail; they'd only see it on their status page.",
       )
     ) {
       return;
@@ -240,14 +258,22 @@ export function ReviewPanel({
           {error}
         </p>
       )}
-      <div className="flex flex-wrap gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <button
           type="button"
           disabled={busy !== null}
           onClick={() => decide("advanced")}
-          className={`${btnPrimary} bg-green-700 hover:bg-green-600`}
+          className={
+            isFinalApprove
+              ? "rounded-md bg-green-700 px-6 py-3 text-base font-bold text-white ring-2 ring-green-300 hover:bg-green-600 disabled:opacity-50"
+              : `${btnPrimary} bg-green-700 hover:bg-green-600`
+          }
         >
-          {busy === "advanced" ? "Working…" : "Advance"}
+          {busy === "advanced"
+            ? "Working…"
+            : isFinalApprove
+              ? "APPROVE: clear to print and mail"
+              : `Advance to ${STATUS_LABELS[target]}`}
         </button>
         <button
           type="button"
@@ -267,6 +293,37 @@ export function ReviewPanel({
         </button>
       </div>
     </div>
+  );
+}
+
+/** Manual AI pre-check run (second pass during content review). */
+export function AiReviewRunButton({ projectId }: { projectId: string }) {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  return (
+    <span className="inline-flex items-center gap-2">
+      <button
+        type="button"
+        disabled={busy}
+        onClick={async () => {
+          setBusy(true);
+          setError(null);
+          const result = await postJson(
+            `/api/admin/projects/${projectId}/ai-review`,
+            {},
+          );
+          setBusy(false);
+          if (!result.ok) setError(result.message ?? "Run failed.");
+          router.refresh();
+        }}
+        className="rounded-md border border-purple-600 bg-white px-3 py-1.5 text-sm font-medium text-purple-800 hover:bg-purple-50 disabled:opacity-50"
+      >
+        {busy ? "Running… (about 20 seconds)" : "Run AI pre-check"}
+      </button>
+      {error && <span className="text-xs text-red-700">{error}</span>}
+    </span>
   );
 }
 

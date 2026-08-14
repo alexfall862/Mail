@@ -16,7 +16,9 @@ import {
   type ProjectStatus,
 } from "@/lib/state-machine";
 import type { UploadKind } from "@/lib/uploads";
+import type { AiReviewResult } from "@/lib/ai-review";
 import { suggestedContactsFor } from "@/lib/campaign-contacts";
+import { AiReviewPanel, type AiReviewEventView } from "./ai-review-panel";
 import { allReviewerContacts } from "@/lib/reviewer-contacts";
 import {
   CampaignContactCard,
@@ -172,6 +174,15 @@ export default async function AdminProjectPage({
         )}
       />
 
+      {/* AI pre-check (advisory) */}
+      {(latestAiReview(events) !== null || status === "content_review") && (
+        <AiReviewPanel
+          projectId={project.id}
+          latest={latestAiReview(events)}
+          canRun={status === "content_review"}
+        />
+      )}
+
       {/* Step 1 (optional): ask outside reviewers to look. Does not move the
           project — kept visually separate from the decision card below. */}
       {isReviewStage(status) && (
@@ -228,9 +239,11 @@ export default async function AdminProjectPage({
             Record your decision: {STATUS_LABELS[status]}
           </h2>
           <p className="mt-1 text-sm text-gray-600">
-            This moves the project. Advance passes{" "}
-            {STATUS_LABELS[status].toLowerCase()}; Request changes and Deny
-            email your notes to the vendor.
+            This moves the project.{" "}
+            {status === "final_review"
+              ? "Approving is the end of the pipeline: the piece is cleared to print and mail."
+              : `Advance passes ${STATUS_LABELS[status].toLowerCase()}.`}{" "}
+            Request changes and Deny email your notes to the vendor.
           </p>
           <div className="mt-4">
             <ReviewPanel
@@ -436,6 +449,38 @@ export default async function AdminProjectPage({
   );
 }
 
+/** Latest AI pre-check outcome from the (already newest-first) event list. */
+function latestAiReview(
+  events: Array<{ eventType: string; createdAt: Date; payload: unknown }>,
+): AiReviewEventView {
+  for (const e of events) {
+    if (e.eventType === "ai_review.completed") {
+      const payload = e.payload as {
+        versionNumber?: number | null;
+        flagCount?: number;
+        result?: AiReviewResult;
+      };
+      if (!payload.result) continue;
+      return {
+        kind: "completed",
+        at: e.createdAt,
+        versionNumber: payload.versionNumber ?? null,
+        flagCount: payload.flagCount ?? 0,
+        result: payload.result,
+      };
+    }
+    if (e.eventType === "ai_review.failed") {
+      const payload = e.payload as { error?: string };
+      return {
+        kind: "failed",
+        at: e.createdAt,
+        error: payload.error ?? "unknown error",
+      };
+    }
+  }
+  return null;
+}
+
 /** All configured reviewers plus this ticket's campaign contact, deduped;
  * the current stage's reviewers are the pre-checked defaults. At campaign
  * review the campaign contact is deliberately absent: the dedicated
@@ -514,6 +559,10 @@ function describeEvent(
       return `EMAIL FAILED: ${String(payload.template ?? "?")}`;
     case "email.skipped":
       return `Vendor email suppressed${who} (${String(payload.stage ?? "?")}: ${String(payload.decision ?? "?")})`;
+    case "ai_review.completed":
+      return `AI pre-check completed (${String(payload.flagCount ?? "?")} flag${payload.flagCount === 1 ? "" : "s"})${who}`;
+    case "ai_review.failed":
+      return `AI pre-check failed: ${String(payload.error ?? "?")}`;
     case "token.rotated":
       return `Vendor link regenerated${who}`;
     case "contact.paid":
