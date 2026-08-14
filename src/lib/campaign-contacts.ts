@@ -24,16 +24,12 @@ export type KnownCampaignContact = {
 export const KNOWN_CAMPAIGN_CONTACTS: KnownCampaignContact[] = [
   // 2026 cycle. Examples of the shape — replace with the real roster:
   { office: "us_senate", name: "Mike Phillips", email: "mike.phillips@adamhamilton.com", note: "Campaign Manager" },
-  { office: "us_house", name: "Sample Name", email: "sample@email.org", note: "Campaign manager" },
-  { office: "governor", name: "Sample Name", email: "tj@propulsionstrategies.com", note: "Campaign Consultant" },
+  { office: "governor", name: "TJ Helmstetter", email: "tj@propulsionstrategies.com", note: "Campaign Consultant" },
   { office: "secretary_of_state", name: "John Worth", email: "john@electjenday.com", note: "Campaign Manager" },
   { office: "attorney_general", name: "Leah Rymer", email: "leah.rymer@chrismannforkansas.com", note: "Campaign Manager" },
   { office: "state_treasurer", name: "Justin Cohen", email: "justin.cohen.p@gmail.com", note: "Campaign Consultant" },
   { office: "insurance_commissioner", name: "Justin Cohen", email: "justin.cohen.p@gmail.com", note: "Campaign Consultant" },
-  { office: "state_board_of_education", name: "Sample Name", email: "sample@email.org", note: "Campaign Manager" },
-  { office: "state_senate", name: "Sample Name", email: "sample@email.org", note: "Campaign Manager" },
   { office: "state_house", name: "Lauren Martin", email: "lauren@kansashousedems.com", note: "Candidate Services" },
-  { office: "county_party", name: "Sample Name", email: "sample@email.org", note: "Campaign Manager" }
 
 
 ];
