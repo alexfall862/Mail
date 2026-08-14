@@ -154,6 +154,180 @@ export function ReviewPanel({
   );
 }
 
+export type CampaignContactSuggestion = {
+  name: string;
+  email: string;
+  phone?: string;
+  note?: string;
+};
+
+/**
+ * Admin-owned campaign contact for this ticket: shows the current contact,
+ * lets an admin set/approve one, and offers prepopulated suggestions from
+ * the known-roster table (src/lib/campaign-contacts.ts) for this race.
+ */
+export function CampaignContactCard({
+  projectId,
+  current,
+  suggestions,
+}: {
+  projectId: string;
+  current: { name: string; email: string; phone: string | null };
+  suggestions: CampaignContactSuggestion[];
+}) {
+  const router = useRouter();
+  const hasContact = current.email !== "";
+  const [editing, setEditing] = useState(!hasContact);
+  const [name, setName] = useState(current.name);
+  const [email, setEmail] = useState(current.email);
+  const [phone, setPhone] = useState(current.phone ?? "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function save() {
+    setBusy(true);
+    setError(null);
+    const result = await postJson(
+      `/api/admin/projects/${projectId}/campaign-contact`,
+      { name, email, phone: phone || undefined },
+    );
+    setBusy(false);
+    if (!result.ok) {
+      setError(result.message ?? "Save failed.");
+      return;
+    }
+    setEditing(false);
+    router.refresh();
+  }
+
+  const inputCls =
+    "mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none";
+
+  return (
+    <div className="rounded-lg border border-gray-200 bg-white p-4 text-sm">
+      <div className="flex items-center justify-between">
+        <h3 className="font-semibold text-gray-900">Campaign contact</h3>
+        {hasContact && !editing && (
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            className="text-xs text-blue-700 underline"
+          >
+            Edit
+          </button>
+        )}
+      </div>
+
+      {!editing ? (
+        <p className="mt-2 text-gray-700">
+          {current.name}
+          {current.email && ` · ${current.email}`}
+          {current.phone && ` · ${current.phone}`}
+        </p>
+      ) : (
+        <div className="mt-3 space-y-3">
+          {!hasContact && (
+            <p className="text-gray-600">
+              No campaign contact set. The campaign review email can&apos;t be
+              sent until one is approved here.
+            </p>
+          )}
+          {suggestions.length > 0 && (
+            <div>
+              <p className="text-xs font-medium uppercase text-gray-500">
+                Known contacts for this race
+              </p>
+              <ul className="mt-1 space-y-1">
+                {suggestions.map((s) => (
+                  <li key={s.email} className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setName(s.name);
+                        setEmail(s.email);
+                        setPhone(s.phone ?? "");
+                      }}
+                      className="rounded-md border border-cyan-600 px-2 py-1 text-xs font-medium text-cyan-800 hover:bg-cyan-50"
+                    >
+                      Use {s.name}
+                    </button>
+                    <span className="text-xs text-gray-600">
+                      {s.email}
+                      {s.note ? ` · ${s.note}` : ""}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-700">
+                Name
+              </label>
+              <input
+                className={inputCls}
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700">
+                Email
+              </label>
+              <input
+                type="email"
+                className={inputCls}
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700">
+                Phone (optional)
+              </label>
+              <input
+                className={inputCls}
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+              />
+            </div>
+          </div>
+          {error && (
+            <p role="alert" className="text-red-700">
+              {error}
+            </p>
+          )}
+          <div className="flex gap-3">
+            <button
+              type="button"
+              disabled={busy || !name.trim() || !email.trim()}
+              onClick={save}
+              className="rounded-md bg-blue-700 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-600 disabled:opacity-50"
+            >
+              {busy ? "Saving…" : "Save contact"}
+            </button>
+            {hasContact && (
+              <button
+                type="button"
+                onClick={() => {
+                  setName(current.name);
+                  setEmail(current.email);
+                  setPhone(current.phone ?? "");
+                  setEditing(false);
+                }}
+                className="rounded-md border border-gray-300 px-3 py-1.5 text-sm"
+              >
+                Cancel
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function CampaignReviewEmailButton({
   projectId,
   contactName,

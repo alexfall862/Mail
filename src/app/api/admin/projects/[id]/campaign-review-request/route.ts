@@ -35,7 +35,10 @@ export async function POST(
     );
   }
   if (!project.campaignContactEmail) {
-    return jsonError(400, "This project has no campaign contact email on file.");
+    return jsonError(
+      400,
+      "Set a campaign contact on the ticket before sending the review email.",
+    );
   }
 
   const ctx = await projectEmailContext(id);

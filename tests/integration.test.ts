@@ -56,6 +56,7 @@ import {
   getDashboardRows,
   regenerateLink,
   reopenProject,
+  setCampaignContact,
   setContactPaid,
 } from "@/lib/admin-ops";
 import { createProject, resubmitProject } from "@/lib/projects";
@@ -106,9 +107,6 @@ function baseSubmit(projectId: string): SubmitRequest {
       postOfficeLocation: "Topeka, KS",
       permitNumber: "PERMIT-1",
       mailDate: "2030-01-15",
-      campaignContactName: "Casey Campaign",
-      campaignContactEmail: "casey@campaign.example",
-      campaignContactPhone: "785-555-0100",
     },
     contacts: [
       {
@@ -544,6 +542,41 @@ describe("payment tracking, link rotation, dashboard", () => {
 
     const unpaid = await setContactPaid({ projectId, contactId: printShop.id, paid: false, adminId });
     expect(unpaid.ok).toBe(true);
+  });
+
+  it("admin sets the campaign contact; resubmission never clobbers it", async () => {
+    const { projectId, rawToken } = await makeProject();
+    const set = await setCampaignContact({
+      projectId,
+      name: "Casey Campaign",
+      email: "Casey@Campaign.example",
+      phone: "785-555-0100",
+      adminId,
+    });
+    expect(set.ok).toBe(true);
+
+    // Kick back and resubmit with a note; the admin-set contact must survive.
+    const bounce = await decideReview({
+      projectId,
+      stage: "content_review",
+      decision: "changes_requested",
+      checklist: {},
+      notes: "Fix it.",
+      adminId,
+    });
+    expect(bounce.ok).toBe(true);
+    const resubmit = await resubmitProject(
+      resubmitPayload(rawToken, projectId, 2, {
+        carry: ["artwork_front", "artwork_back", "invoice"],
+        note: "Done.",
+      }),
+    );
+    expect(resubmit.ok).toBe(true);
+
+    const [project] = await db.select().from(projects).where(eq(projects.id, projectId));
+    expect(project!.campaignContactName).toBe("Casey Campaign");
+    expect(project!.campaignContactEmail).toBe("casey@campaign.example");
+    expect(project!.campaignContactPhone).toBe("785-555-0100");
   });
 
   it("regenerating the link rotates the hash and stamps token_rotated_at", async () => {

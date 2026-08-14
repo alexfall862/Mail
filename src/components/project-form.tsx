@@ -96,9 +96,6 @@ export function ProjectForm(props: ProjectFormProps) {
     postOfficeLocation: initial?.project.postOfficeLocation ?? "",
     permitNumber: initial?.project.permitNumber ?? "",
     mailDate: initial?.project.mailDate ?? "",
-    campaignContactName: initial?.project.campaignContactName ?? "",
-    campaignContactEmail: initial?.project.campaignContactEmail ?? "",
-    campaignContactPhone: initial?.project.campaignContactPhone ?? "",
   }));
   const [contacts, setContacts] = useState<ContactState[]>(() =>
     VENDOR_ROLES.map(({ value }) => {
@@ -180,9 +177,6 @@ export function ProjectForm(props: ProjectFormProps) {
       postOfficeLocation: fields.postOfficeLocation,
       permitNumber: fields.permitNumber,
       mailDate: fields.mailDate,
-      campaignContactName: fields.campaignContactName,
-      campaignContactEmail: fields.campaignContactEmail,
-      campaignContactPhone: fields.campaignContactPhone || undefined,
     };
     if (!fields.office) return "Select the office.";
     const schema =
@@ -550,51 +544,6 @@ export function ProjectForm(props: ProjectFormProps) {
             <p className="mt-1 text-xs text-gray-500">
               Must be at least two full business days from today.
             </p>
-          </div>
-        </div>
-      </section>
-
-      {/* --------------------------------------------- Campaign contact */}
-      <section className="space-y-4">
-        <h2 className="text-lg font-semibold text-gray-900">Campaign contact</h2>
-        <p className="text-sm text-gray-600">
-          Who at the campaign can confirm this piece? KDP reaches out to them
-          during campaign review.
-        </p>
-        <div className="grid gap-4 sm:grid-cols-3">
-          <div>
-            <label htmlFor="campaign-name" className={labelCls}>
-              Contact name *
-            </label>
-            <input
-              id="campaign-name"
-              className={inputCls}
-              value={fields.campaignContactName}
-              onChange={(e) => setField("campaignContactName", e.target.value)}
-            />
-          </div>
-          <div>
-            <label htmlFor="campaign-email" className={labelCls}>
-              Contact email *
-            </label>
-            <input
-              id="campaign-email"
-              type="email"
-              className={inputCls}
-              value={fields.campaignContactEmail}
-              onChange={(e) => setField("campaignContactEmail", e.target.value)}
-            />
-          </div>
-          <div>
-            <label htmlFor="campaign-phone" className={labelCls}>
-              Contact phone
-            </label>
-            <input
-              id="campaign-phone"
-              className={inputCls}
-              value={fields.campaignContactPhone}
-              onChange={(e) => setField("campaignContactPhone", e.target.value)}
-            />
           </div>
         </div>
       </section>

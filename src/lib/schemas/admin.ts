@@ -41,6 +41,12 @@ export const reopenSchema = z.object({
   reason: z.string().trim().min(1, "A reason is required to reopen."),
 });
 
+export const campaignContactSchema = z.object({
+  name: z.string().trim().min(1, "Contact name is required.").max(200),
+  email: z.email("Enter a valid contact email."),
+  phone: z.string().trim().max(50).optional(),
+});
+
 export const createAdminSchema = z.object({
   email: z.email("Enter a valid email address."),
   name: z.string().trim().min(1, "Name is required.").max(200),

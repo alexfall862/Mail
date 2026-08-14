@@ -16,7 +16,9 @@ import {
   type ProjectStatus,
 } from "@/lib/state-machine";
 import type { UploadKind } from "@/lib/uploads";
+import { suggestedContactsFor } from "@/lib/campaign-contacts";
 import {
+  CampaignContactCard,
   CampaignReviewEmailButton,
   DeleteProjectButton,
   PaidCheckbox,
@@ -147,20 +149,25 @@ export default async function AdminProjectPage({
           }
         />
         <div className="sm:col-span-2 lg:col-span-3">
-          <p className="text-xs uppercase text-gray-500">Campaign contact</p>
-          <p className="mt-0.5 text-gray-900">
-            {project.campaignContactName || "-"}
-            {project.campaignContactEmail && ` · ${project.campaignContactEmail}`}
-            {project.campaignContactPhone && ` · ${project.campaignContactPhone}`}
-          </p>
-        </div>
-        <div className="sm:col-span-2 lg:col-span-3">
           <p className="text-xs uppercase text-gray-500">Description</p>
           <p className="mt-0.5 whitespace-pre-line text-gray-900">
             {project.description}
           </p>
         </div>
       </section>
+
+      {/* Campaign contact (admin-owned; suggestions from the known roster) */}
+      <CampaignContactCard
+        projectId={project.id}
+        current={{
+          name: project.campaignContactName,
+          email: project.campaignContactEmail,
+          phone: project.campaignContactPhone,
+        }}
+        suggestions={suggestedContactsFor(project.office, project.districtDetail).map(
+          (s) => ({ name: s.name, email: s.email, phone: s.phone, note: s.note }),
+        )}
+      />
 
       {/* Review panel for the current stage */}
       {isReviewStage(status) && (
@@ -170,11 +177,18 @@ export default async function AdminProjectPage({
           </h2>
           {status === "campaign_review" && (
             <div className="mb-5 border-b border-blue-200 pb-5">
-              <CampaignReviewEmailButton
-                projectId={project.id}
-                contactName={project.campaignContactName || "the campaign contact"}
-                contactEmail={project.campaignContactEmail}
-              />
+              {project.campaignContactEmail ? (
+                <CampaignReviewEmailButton
+                  projectId={project.id}
+                  contactName={project.campaignContactName || "the campaign contact"}
+                  contactEmail={project.campaignContactEmail}
+                />
+              ) : (
+                <p className="text-sm text-amber-800">
+                  Set a campaign contact above to send the campaign review
+                  email.
+                </p>
+              )}
             </div>
           )}
           <ReviewPanel projectId={project.id} stage={status} />
@@ -407,6 +421,8 @@ function describeEvent(
       return `Marked unpaid: ${String(payload.org ?? payload.role ?? "?")}${who}`;
     case "project.reopened":
       return `Reopened${who}: ${String(payload.reason ?? "")}`;
+    case "campaign_contact.updated":
+      return `Campaign contact set to ${String(payload.name ?? "?")} (${String(payload.email ?? "?")})${who}`;
     default:
       return type;
   }

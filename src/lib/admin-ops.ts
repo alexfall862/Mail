@@ -289,6 +289,46 @@ export async function regenerateLink(input: {
   return result;
 }
 
+/** Set/approve the campaign contact on a ticket (admin-owned data). */
+export async function setCampaignContact(input: {
+  projectId: string;
+  name: string;
+  email: string;
+  phone: string | null;
+  adminId: string;
+}): Promise<OpResult<{ updated: true }>> {
+  return db.transaction(async (tx) => {
+    const project = await lockProject(tx, input.projectId);
+    if (!project) return fail(404, "Project not found.");
+    const email = input.email.trim().toLowerCase();
+    const phone = input.phone?.trim() ? input.phone.trim() : null;
+    await tx
+      .update(projects)
+      .set({
+        campaignContactName: input.name.trim(),
+        campaignContactEmail: email,
+        campaignContactPhone: phone,
+        updatedAt: new Date(),
+      })
+      .where(eq(projects.id, project.id));
+    await logEvent(tx, {
+      projectId: project.id,
+      actor: "admin",
+      actorId: input.adminId,
+      eventType: "campaign_contact.updated",
+      payload: {
+        previous: {
+          name: project.campaignContactName,
+          email: project.campaignContactEmail,
+        },
+        name: input.name.trim(),
+        email,
+      },
+    });
+    return { ok: true as const, value: { updated: true } };
+  });
+}
+
 /** Toggle a contact's paid state (visible only where paid_by_kdp). */
 export async function setContactPaid(input: {
   projectId: string;

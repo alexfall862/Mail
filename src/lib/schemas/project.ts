@@ -110,13 +110,8 @@ const baseProjectFields = z.object({
     mailDate: z
       .string()
       .regex(/^\d{4}-\d{2}-\d{2}$/, "Enter a valid mail date."),
-    campaignContactName: z
-      .string()
-      .trim()
-      .min(1, "Campaign contact name is required.")
-      .max(200),
-    campaignContactEmail: z.email("Enter a valid campaign contact email."),
-    campaignContactPhone: z.string().trim().max(50).optional(),
+    // Campaign contact fields are deliberately absent: that's admin-side data
+    // set on the ticket (with known-roster suggestions), not vendor intake.
   });
 
 function refineProjectFields(
