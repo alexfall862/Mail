@@ -106,6 +106,7 @@ export function ReviewPanel({
     Object.fromEntries(items.map((i) => [i.key, false])),
   );
   const [notes, setNotes] = useState("");
+  const [notifyVendor, setNotifyVendor] = useState(true);
   const [ccAdmins, setCcAdmins] = useState(true);
   const [extraCc, setExtraCc] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -121,7 +122,23 @@ export function ReviewPanel({
       );
       return;
     }
-    if (decision === "denied" && !window.confirm("Deny this mail piece? This is terminal. The vendor is notified with your reason.")) {
+    if (
+      decision === "denied" &&
+      !window.confirm(
+        notifyVendor
+          ? "Deny this mail piece? This is terminal. The vendor is notified with your reason."
+          : "Deny this mail piece WITHOUT emailing the vendor? This is terminal; they'd only see the denial and your reason on their status page.",
+      )
+    ) {
+      return;
+    }
+    if (
+      decision === "changes_requested" &&
+      !notifyVendor &&
+      !window.confirm(
+        "Request changes WITHOUT emailing the vendor? They won't be notified; your notes appear only on their status page.",
+      )
+    ) {
       return;
     }
     setBusy(decision);
@@ -130,6 +147,7 @@ export function ReviewPanel({
       decision,
       checklist,
       notes: notes.trim() || undefined,
+      notifyVendor,
       emailOptions: { ccAdmins, extraCc: parseExtraCc(extraCc) },
     });
     setBusy(null);
@@ -176,13 +194,31 @@ export function ReviewPanel({
           onChange={(e) => setNotes(e.target.value)}
         />
       </div>
-      <EmailOptionsFields
-        label="Decision email to the vendor: CC options"
-        ccAdmins={ccAdmins}
-        onCcAdmins={setCcAdmins}
-        extraCc={extraCc}
-        onExtraCc={setExtraCc}
-      />
+      <div className="space-y-2 rounded-md border border-gray-200 bg-white/60 p-3">
+        <label className="flex items-center gap-2 text-sm font-medium text-gray-900">
+          <input
+            type="checkbox"
+            checked={notifyVendor}
+            onChange={(e) => setNotifyVendor(e.target.checked)}
+          />
+          Email the vendor&apos;s primary contacts about this decision
+        </label>
+        {notifyVendor ? (
+          <EmailOptionsFields
+            label="Vendor email: CC options"
+            ccAdmins={ccAdmins}
+            onCcAdmins={setCcAdmins}
+            extraCc={extraCc}
+            onExtraCc={setExtraCc}
+          />
+        ) : (
+          <p className="text-xs text-amber-800">
+            No email will be sent for this decision. The vendor still sees the
+            new status (and any notes) on their status page, and the skipped
+            email is recorded in the event timeline.
+          </p>
+        )}
+      </div>
       {error && (
         <p role="alert" className="text-sm text-red-700">
           {error}
@@ -442,25 +478,28 @@ export type ReviewerContactOption = {
   name: string;
   email: string;
   note?: string;
+  /** Stage labels this contact usually reviews at (badges in the list). */
+  tags: string[];
+  /** Pre-checked when they review the project's current stage. */
+  defaultChecked: boolean;
 };
 
 /**
- * Manual notice to the standing reviewer roster (compliance/legal) for the
- * current stage. Recipients default to everyone configured; individual
- * contacts can be unticked before sending.
+ * Manual review notice. Offers every configured reviewer (all rosters) plus
+ * the ticket's campaign contact; the current stage's reviewers start
+ * checked. With nobody selected the notice goes to the admin team only
+ * (quick internal heads-up or testing).
  */
 export function ReviewerNoticeButtons({
   projectId,
-  stageLabel,
   contacts,
 }: {
   projectId: string;
-  stageLabel: string;
   contacts: ReviewerContactOption[];
 }) {
   const router = useRouter();
   const [selected, setSelected] = useState<Record<string, boolean>>(() =>
-    Object.fromEntries(contacts.map((c) => [c.email, true])),
+    Object.fromEntries(contacts.map((c) => [c.email, c.defaultChecked])),
   );
   const [ccAdmins, setCcAdmins] = useState(true);
   const [extraCc, setExtraCc] = useState("");
@@ -468,32 +507,45 @@ export function ReviewerNoticeButtons({
   const [message, setMessage] = useState<string | null>(null);
 
   const chosen = contacts.filter((c) => selected[c.email]);
+  const adminOnly = chosen.length === 0;
 
   return (
     <div className="max-w-xl space-y-3">
       <div>
-        <p className="text-sm font-medium text-gray-900">
-          Standing {stageLabel.toLowerCase()} reviewers
+        <p className="text-sm font-medium text-gray-900">Send a review notice</p>
+        <p className="mt-0.5 text-xs text-gray-600">
+          Reviewers for the current stage start checked. With nobody checked,
+          the notice goes to the admin team only.
         </p>
-        <ul className="mt-1 space-y-1">
-          {contacts.map((c) => (
-            <li key={c.email}>
-              <label className="flex items-center gap-2 text-sm text-gray-700">
-                <input
-                  type="checkbox"
-                  checked={selected[c.email] ?? false}
-                  onChange={(e) =>
-                    setSelected((s) => ({ ...s, [c.email]: e.target.checked }))
-                  }
-                />
-                {c.name} · {c.email}
-                {c.note ? (
-                  <span className="text-xs text-gray-500">({c.note})</span>
-                ) : null}
-              </label>
-            </li>
-          ))}
-        </ul>
+        {contacts.length > 0 && (
+          <ul className="mt-2 space-y-1">
+            {contacts.map((c) => (
+              <li key={c.email}>
+                <label className="flex flex-wrap items-center gap-2 text-sm text-gray-700">
+                  <input
+                    type="checkbox"
+                    checked={selected[c.email] ?? false}
+                    onChange={(e) =>
+                      setSelected((s) => ({ ...s, [c.email]: e.target.checked }))
+                    }
+                  />
+                  {c.name} · {c.email}
+                  {c.note ? (
+                    <span className="text-xs text-gray-500">({c.note})</span>
+                  ) : null}
+                  {c.tags.map((tag) => (
+                    <span
+                      key={tag}
+                      className="rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-medium text-indigo-800"
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </label>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
       <EmailOptionsFields
         label="Notice email: CC options"
@@ -505,14 +557,12 @@ export function ReviewerNoticeButtons({
       <div className="flex flex-wrap items-center gap-2">
         <button
           type="button"
-          disabled={busy || chosen.length === 0}
+          disabled={busy}
           onClick={async () => {
-            if (
-              !window.confirm(
-                `Email ${chosen.map((c) => c.name).join(", ")} asking them to review this piece? The email includes the status link and the scheduled mail date.`,
-              )
-            )
-              return;
+            const summary = adminOnly
+              ? "No reviewers are selected. Send the notice to the admin team only?"
+              : `Email ${chosen.map((c) => c.name).join(", ")} asking them to review this piece? The email includes the status link and the scheduled mail date.`;
+            if (!window.confirm(summary)) return;
             setBusy(true);
             setMessage(null);
             const result = await postJson(
@@ -525,14 +575,20 @@ export function ReviewerNoticeButtons({
             setBusy(false);
             setMessage(
               result.ok
-                ? `Notice sent to ${chosen.map((c) => c.email).join(", ")}.`
+                ? adminOnly
+                  ? "Notice sent to the admin team."
+                  : `Notice sent to ${chosen.map((c) => c.email).join(", ")}.`
                 : (result.message ?? "Send failed."),
             );
             router.refresh();
           }}
           className="rounded-md border border-indigo-600 bg-white px-3 py-1.5 text-sm font-medium text-indigo-800 hover:bg-indigo-50 disabled:opacity-50"
         >
-          {busy ? "Sending…" : "Notify reviewers"}
+          {busy
+            ? "Sending…"
+            : adminOnly
+              ? "Send notice (admin team only)"
+              : `Notify ${chosen.length} reviewer${chosen.length === 1 ? "" : "s"}`}
         </button>
         {message && <span className="text-xs text-gray-600">{message}</span>}
       </div>

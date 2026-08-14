@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
 import { decideReview } from "@/lib/admin-ops";
 import { guardAdminRequest } from "@/lib/admin-api";
+import { db } from "@/db";
 import {
   activeAdminEmails,
   projectEmailContext,
   sendAndLog,
 } from "@/lib/email/send";
+import { logEvent } from "@/lib/events";
 import {
   vendorApproved,
   vendorChangesRequested,
@@ -42,8 +44,22 @@ export async function POST(
   if (!result.ok) return jsonError(result.status, result.message);
 
   // §12 templates 3–6, chosen by the exact transition; sent after commit.
-  // Admin team is CC'd by default; the panel can toggle that and add
-  // additional parties.
+  // Admin team is CC'd by default; the panel can toggle that, add additional
+  // parties, or suppress the vendor email entirely (audited).
+  if (!parsed.data.notifyVendor) {
+    await logEvent(db, {
+      projectId: id,
+      actor: "admin",
+      actorId: guard.session.admin.id,
+      eventType: "email.skipped",
+      payload: {
+        reason: "suppressed_by_reviewer",
+        stage: result.value.stage,
+        decision: result.value.decision,
+      },
+    });
+    return NextResponse.json({ ok: true, newStatus: result.value.newStatus });
+  }
   const ctx = await projectEmailContext(id);
   if (ctx) {
     const { emailOptions } = parsed.data;

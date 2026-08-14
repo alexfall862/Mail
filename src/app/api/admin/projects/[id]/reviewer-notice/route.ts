@@ -1,8 +1,8 @@
 /**
- * Admin-triggered notice to the standing reviewer contacts (compliance,
- * legal, etc.) configured for the project's current stage in
- * src/lib/reviewer-contacts.ts. Recipients must come from that roster;
- * re-sending is allowed and every send lands in the event timeline.
+ * Admin-triggered review notice. Recipients may be any configured reviewer
+ * (any stage's roster) or the project's campaign contact; with no recipients
+ * selected the notice goes to the admin team only (quick internal heads-up
+ * or testing). Re-sending is allowed; every send lands in the event timeline.
  */
 import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
@@ -17,13 +17,13 @@ import {
 } from "@/lib/email/send";
 import { reviewerNotice } from "@/lib/email/templates";
 import { jsonError } from "@/lib/http";
-import { reviewerContactsFor } from "@/lib/reviewer-contacts";
+import { allReviewerContacts } from "@/lib/reviewer-contacts";
 import { emailOptionsSchema } from "@/lib/schemas/admin";
 import { isReviewStage, STATUS_LABELS } from "@/lib/state-machine";
 
 const bodySchema = z.object({
-  /** Subset of the configured roster; omitted = everyone configured. */
-  recipients: z.array(z.email()).max(20).optional(),
+  /** Reviewer/campaign-contact emails; empty = admin team only. */
+  recipients: z.array(z.email()).max(20).default([]),
   emailOptions: emailOptionsSchema.default({ ccAdmins: true, extraCc: [] }),
 });
 
@@ -39,7 +39,10 @@ export async function POST(
   if (!parsed.success) return jsonError(400, "Invalid request.");
 
   const [project] = await db
-    .select({ status: projects.status })
+    .select({
+      status: projects.status,
+      campaignContactEmail: projects.campaignContactEmail,
+    })
     .from(projects)
     .where(eq(projects.id, id));
   if (!project) return jsonError(404, "Project not found.");
@@ -47,34 +50,41 @@ export async function POST(
     return jsonError(409, "This project is not at a review stage right now.");
   }
 
-  const configured = reviewerContactsFor(project.status);
-  if (configured.length === 0) {
+  // Whitelist: every configured reviewer plus this ticket's campaign contact.
+  const allowed = new Set(
+    allReviewerContacts().map((c) => c.email.toLowerCase()),
+  );
+  if (project.campaignContactEmail) {
+    allowed.add(project.campaignContactEmail.toLowerCase());
+  }
+  const requested = [...new Set(parsed.data.recipients)];
+  const invalid = requested.filter((e) => !allowed.has(e.toLowerCase()));
+  if (invalid.length > 0) {
     return jsonError(
       400,
-      "No reviewer contacts are configured for this stage (src/lib/reviewer-contacts.ts).",
+      "Recipients must come from the configured reviewer rosters or be this project's campaign contact.",
     );
-  }
-  const configuredEmails = new Set(configured.map((c) => c.email.toLowerCase()));
-  const to = (
-    parsed.data.recipients ?? configured.map((c) => c.email)
-  ).filter((e) => configuredEmails.has(e.toLowerCase()));
-  if (to.length === 0) {
-    return jsonError(400, "Select at least one configured reviewer contact.");
   }
 
   const ctx = await projectEmailContext(id);
   if (!ctx) return jsonError(404, "Project not found.");
 
-  const cc = [
-    ...(parsed.data.emailOptions.ccAdmins ? await activeAdminEmails() : []),
-    ...parsed.data.emailOptions.extraCc,
-  ];
+  const admins = await activeAdminEmails();
+  const adminOnly = requested.length === 0;
+  const to = adminOnly ? admins : requested;
+  const cc = adminOnly
+    ? parsed.data.emailOptions.extraCc
+    : [
+        ...(parsed.data.emailOptions.ccAdmins ? admins : []),
+        ...parsed.data.emailOptions.extraCc,
+      ];
+
   await sendAndLog(
     id,
-    [...new Set(to)],
+    to,
     reviewerNotice(ctx.summary, STATUS_LABELS[project.status], ctx.magicLink),
     { cc },
   );
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, adminOnly });
 }

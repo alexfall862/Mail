@@ -17,7 +17,7 @@ import {
 } from "@/lib/state-machine";
 import type { UploadKind } from "@/lib/uploads";
 import { suggestedContactsFor } from "@/lib/campaign-contacts";
-import { reviewerContactsFor } from "@/lib/reviewer-contacts";
+import { allReviewerContacts } from "@/lib/reviewer-contacts";
 import {
   CampaignContactCard,
   CampaignReviewEmailButton,
@@ -174,54 +174,52 @@ export default async function AdminProjectPage({
 
       {/* Step 1 (optional): ask outside reviewers to look. Does not move the
           project — kept visually separate from the decision card below. */}
-      {isReviewStage(status) &&
-        (reviewerContactsFor(status).length > 0 ||
-          status === "campaign_review") && (
-          <section className="rounded-lg border border-indigo-200 bg-indigo-50/40 p-5">
-            <h2 className="text-lg font-semibold text-gray-900">
-              Ask for outside review
-            </h2>
-            <p className="mt-1 text-sm text-gray-600">
-              Optional: send this piece to the people who review at this stage.
-              Sending a notice does <strong>not</strong> move the project.
-            </p>
-            <div className="mt-4 space-y-5">
-              {reviewerContactsFor(status).length > 0 && (
-                <ReviewerNoticeButtons
-                  projectId={project.id}
-                  stageLabel={STATUS_LABELS[status]}
-                  contacts={reviewerContactsFor(status)}
-                />
+      {isReviewStage(status) && (
+        <section className="rounded-lg border border-indigo-200 bg-indigo-50/40 p-5">
+          <h2 className="text-lg font-semibold text-gray-900">
+            Ask for outside review
+          </h2>
+          <p className="mt-1 text-sm text-gray-600">
+            Optional. Sending a notice does <strong>not</strong> move the
+            project; recording a decision below does.
+          </p>
+          <div className="mt-4 space-y-5">
+            <ReviewerNoticeButtons
+              projectId={project.id}
+              contacts={buildNoticeContacts(
+                status,
+                project.campaignContactName,
+                project.campaignContactEmail,
               )}
-              {status === "campaign_review" &&
-                (project.campaignContactEmail ? (
-                  <div
-                    className={
-                      reviewerContactsFor(status).length > 0
-                        ? "border-t border-indigo-200 pt-5"
-                        : undefined
-                    }
-                  >
-                    <p className="mb-3 text-sm font-medium text-gray-900">
-                      Campaign contact
-                    </p>
-                    <CampaignReviewEmailButton
-                      projectId={project.id}
-                      contactName={
-                        project.campaignContactName || "the campaign contact"
-                      }
-                      contactEmail={project.campaignContactEmail}
-                    />
-                  </div>
-                ) : (
-                  <p className="text-sm text-amber-800">
-                    Set a campaign contact above to send the campaign review
-                    email.
+            />
+            {status === "campaign_review" &&
+              (project.campaignContactEmail ? (
+                <div className="border-t border-indigo-200 pt-5">
+                  <p className="text-sm font-medium text-gray-900">
+                    Campaign sign-off request
                   </p>
-                ))}
-            </div>
-          </section>
-        )}
+                  <p className="mb-3 mt-0.5 text-xs text-gray-600">
+                    The formal &quot;KDP is investing in your race&quot; email
+                    to the campaign contact, with the scheduled mail date and
+                    the status link.
+                  </p>
+                  <CampaignReviewEmailButton
+                    projectId={project.id}
+                    contactName={
+                      project.campaignContactName || "the campaign contact"
+                    }
+                    contactEmail={project.campaignContactEmail}
+                  />
+                </div>
+              ) : (
+                <p className="border-t border-indigo-200 pt-5 text-sm text-amber-800">
+                  Set a campaign contact above to send the campaign sign-off
+                  request.
+                </p>
+              ))}
+          </div>
+        </section>
+      )}
 
       {/* Step 2: the decision — this is what moves the project. */}
       {isReviewStage(status) && (
@@ -428,6 +426,37 @@ export default async function AdminProjectPage({
   );
 }
 
+/** All configured reviewers plus this ticket's campaign contact, deduped;
+ * the current stage's reviewers are the pre-checked defaults. */
+function buildNoticeContacts(
+  status: ProjectStatus,
+  campaignContactName: string,
+  campaignContactEmail: string,
+) {
+  const options = allReviewerContacts().map((c) => ({
+    name: c.name,
+    email: c.email,
+    note: c.note,
+    tags: c.stages.map((s) => STATUS_LABELS[s]),
+    defaultChecked: (c.stages as string[]).includes(status),
+  }));
+  if (
+    campaignContactEmail &&
+    !options.some(
+      (o) => o.email.toLowerCase() === campaignContactEmail.toLowerCase(),
+    )
+  ) {
+    options.push({
+      name: campaignContactName || "Campaign contact",
+      email: campaignContactEmail,
+      note: "Campaign contact",
+      tags: [],
+      defaultChecked: false,
+    });
+  }
+  return options;
+}
+
 function Fact({ label, value }: { label: string; value: string }) {
   return (
     <div>
@@ -469,6 +498,8 @@ function describeEvent(
       return `Email sent: ${String(payload.template ?? "?")} → ${Array.isArray(payload.recipients) ? (payload.recipients as string[]).join(", ") : "?"}`;
     case "email.failed":
       return `EMAIL FAILED: ${String(payload.template ?? "?")}`;
+    case "email.skipped":
+      return `Vendor email suppressed${who} (${String(payload.stage ?? "?")}: ${String(payload.decision ?? "?")})`;
     case "token.rotated":
       return `Vendor link regenerated${who}`;
     case "contact.paid":

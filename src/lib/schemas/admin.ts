@@ -17,6 +17,9 @@ export const reviewDecisionSchema = z
     decision: z.enum(REVIEW_DECISIONS),
     checklist: z.record(z.string(), z.boolean()).default({}),
     notes: z.string().trim().max(10_000).optional(),
+    /** Off = suppress the vendor email for this decision (late-revision
+     * churn); the status page still updates and the suppression is audited. */
+    notifyVendor: z.boolean().default(true),
     emailOptions: emailOptionsSchema.default({ ccAdmins: true, extraCc: [] }),
   })
   .superRefine((data, ctx) => {

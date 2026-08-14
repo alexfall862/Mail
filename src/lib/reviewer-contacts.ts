@@ -44,3 +44,32 @@ export function reviewerContactsFor(stage: string): ReviewerContact[] {
     return true;
   });
 }
+
+export type ReviewerContactWithStages = ReviewerContact & {
+  stages: ReviewStage[];
+};
+
+/**
+ * Every configured reviewer across all stages, deduplicated by email, with
+ * the stages each is configured for. The notice tool offers all of them at
+ * any stage (current-stage contacts are just the pre-checked defaults).
+ */
+export function allReviewerContacts(
+  table: Partial<Record<ReviewStage, ReviewerContact[]>> = STAGE_REVIEWER_CONTACTS,
+): ReviewerContactWithStages[] {
+  const byEmail = new Map<string, ReviewerContactWithStages>();
+  for (const [stage, list] of Object.entries(table) as Array<
+    [ReviewStage, ReviewerContact[] | undefined]
+  >) {
+    for (const contact of list ?? []) {
+      const key = contact.email.trim().toLowerCase();
+      const existing = byEmail.get(key);
+      if (existing) {
+        if (!existing.stages.includes(stage)) existing.stages.push(stage);
+      } else {
+        byEmail.set(key, { ...contact, stages: [stage] });
+      }
+    }
+  }
+  return [...byEmail.values()];
+}
