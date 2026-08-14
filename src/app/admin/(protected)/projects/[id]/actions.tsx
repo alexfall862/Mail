@@ -39,6 +39,54 @@ async function postJson(
 const btnPrimary =
   "rounded-md px-4 py-2 text-sm font-semibold text-white disabled:opacity-50";
 
+/** Parse a comma-separated email list; empty entries dropped. */
+function parseExtraCc(raw: string): string[] {
+  return raw
+    .split(",")
+    .map((e) => e.trim())
+    .filter((e) => e !== "");
+}
+
+/** Recipient controls shared by admin-triggered outgoing emails. */
+function EmailOptionsFields({
+  ccAdmins,
+  onCcAdmins,
+  extraCc,
+  onExtraCc,
+}: {
+  ccAdmins: boolean;
+  onCcAdmins: (v: boolean) => void;
+  extraCc: string;
+  onExtraCc: (v: string) => void;
+}) {
+  return (
+    <div className="space-y-2 rounded-md border border-gray-200 bg-white/60 p-3">
+      <p className="text-xs font-medium uppercase text-gray-500">
+        Email recipients
+      </p>
+      <label className="flex items-center gap-2 text-sm text-gray-700">
+        <input
+          type="checkbox"
+          checked={ccAdmins}
+          onChange={(e) => onCcAdmins(e.target.checked)}
+        />
+        CC the admin team
+      </label>
+      <div>
+        <label className="block text-xs font-medium text-gray-700">
+          Also include (comma-separated emails)
+        </label>
+        <input
+          className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm"
+          placeholder="name@example.org, other@example.org"
+          value={extraCc}
+          onChange={(e) => onExtraCc(e.target.value)}
+        />
+      </div>
+    </div>
+  );
+}
+
 export function ReviewPanel({
   projectId,
   stage,
@@ -52,6 +100,8 @@ export function ReviewPanel({
     Object.fromEntries(items.map((i) => [i.key, false])),
   );
   const [notes, setNotes] = useState("");
+  const [ccAdmins, setCcAdmins] = useState(true);
+  const [extraCc, setExtraCc] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -74,6 +124,7 @@ export function ReviewPanel({
       decision,
       checklist,
       notes: notes.trim() || undefined,
+      emailOptions: { ccAdmins, extraCc: parseExtraCc(extraCc) },
     });
     setBusy(null);
     if (!result.ok) {
@@ -119,6 +170,12 @@ export function ReviewPanel({
           onChange={(e) => setNotes(e.target.value)}
         />
       </div>
+      <EmailOptionsFields
+        ccAdmins={ccAdmins}
+        onCcAdmins={setCcAdmins}
+        extraCc={extraCc}
+        onExtraCc={setExtraCc}
+      />
       {error && (
         <p role="alert" className="text-sm text-red-700">
           {error}
@@ -238,8 +295,11 @@ export function CampaignContactCard({
                 Known contacts for this race
               </p>
               <ul className="mt-1 space-y-1">
-                {suggestions.map((s) => (
-                  <li key={s.email} className="flex flex-wrap items-center gap-2">
+                {suggestions.map((s, i) => (
+                  <li
+                    key={`${s.email}-${i}`}
+                    className="flex flex-wrap items-center gap-2"
+                  >
                     <button
                       type="button"
                       onClick={() => {
@@ -328,6 +388,49 @@ export function CampaignContactCard({
   );
 }
 
+/** Resume review at the kicking stage without a resubmission (no emails). */
+export function OverrideWaitButton({
+  projectId,
+  stageLabel,
+}: {
+  projectId: string;
+  stageLabel: string;
+}) {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  return (
+    <span className="inline-flex items-center gap-2">
+      <button
+        type="button"
+        disabled={busy}
+        onClick={async () => {
+          if (
+            !window.confirm(
+              `Resume review at ${stageLabel} without a resubmission? Use this when the requested change was cleared up outside the system (no emails are sent, no new version is created).`,
+            )
+          )
+            return;
+          setBusy(true);
+          setError(null);
+          const result = await postJson(
+            `/api/admin/projects/${projectId}/override-wait`,
+            {},
+          );
+          setBusy(false);
+          if (!result.ok) setError(result.message ?? "Override failed.");
+          router.refresh();
+        }}
+        className="rounded-md border border-amber-600 bg-white px-3 py-1.5 text-sm font-medium text-amber-800 hover:bg-amber-100 disabled:opacity-50"
+      >
+        {busy ? "Resuming…" : "Override wait: resume review"}
+      </button>
+      {error && <span className="text-xs text-red-700">{error}</span>}
+    </span>
+  );
+}
+
 export function CampaignReviewEmailButton({
   projectId,
   contactName,
@@ -339,39 +442,49 @@ export function CampaignReviewEmailButton({
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
+  const [ccAdmins, setCcAdmins] = useState(true);
+  const [extraCc, setExtraCc] = useState("");
   const [message, setMessage] = useState<string | null>(null);
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <button
-        type="button"
-        disabled={busy}
-        onClick={async () => {
-          if (
-            !window.confirm(
-              `Email ${contactName} (${contactEmail}) asking the campaign to review this piece? The email includes the status link and the scheduled mail date.`,
+    <div className="max-w-xl space-y-3">
+      <EmailOptionsFields
+        ccAdmins={ccAdmins}
+        onCcAdmins={setCcAdmins}
+        extraCc={extraCc}
+        onExtraCc={setExtraCc}
+      />
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          disabled={busy}
+          onClick={async () => {
+            if (
+              !window.confirm(
+                `Email ${contactName} (${contactEmail}) asking the campaign to review this piece? The email includes the status link and the scheduled mail date.`,
+              )
             )
-          )
-            return;
-          setBusy(true);
-          setMessage(null);
-          const result = await postJson(
-            `/api/admin/projects/${projectId}/campaign-review-request`,
-            {},
-          );
-          setBusy(false);
-          setMessage(
-            result.ok
-              ? `Review request sent to ${contactEmail}.`
-              : (result.message ?? "Send failed."),
-          );
-          router.refresh();
-        }}
-        className="rounded-md border border-cyan-600 bg-white px-3 py-1.5 text-sm font-medium text-cyan-800 hover:bg-cyan-50 disabled:opacity-50"
-      >
-        {busy ? "Sending…" : "Email campaign for review"}
-      </button>
-      {message && <span className="text-xs text-gray-600">{message}</span>}
+              return;
+            setBusy(true);
+            setMessage(null);
+            const result = await postJson(
+              `/api/admin/projects/${projectId}/campaign-review-request`,
+              { emailOptions: { ccAdmins, extraCc: parseExtraCc(extraCc) } },
+            );
+            setBusy(false);
+            setMessage(
+              result.ok
+                ? `Review request sent to ${contactEmail}.`
+                : (result.message ?? "Send failed."),
+            );
+            router.refresh();
+          }}
+          className="rounded-md border border-cyan-600 bg-white px-3 py-1.5 text-sm font-medium text-cyan-800 hover:bg-cyan-50 disabled:opacity-50"
+        >
+          {busy ? "Sending…" : "Email campaign for review"}
+        </button>
+        {message && <span className="text-xs text-gray-600">{message}</span>}
+      </div>
     </div>
   );
 }

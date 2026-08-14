@@ -54,6 +54,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       projectId,
       ctx.primaries,
       vendorConfirmation(ctx.summary, magicLink),
+      { cc: await activeAdminEmails() }, // admins see what vendors receive
     );
     await sendAndLog(
       projectId,

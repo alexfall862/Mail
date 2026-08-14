@@ -54,6 +54,7 @@ import {
   decideReview,
   deleteProject,
   getDashboardRows,
+  overrideWait,
   regenerateLink,
   reopenProject,
   setCampaignContact,
@@ -477,6 +478,65 @@ describe("resubmission routing rule (§5 row 7)", () => {
     );
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.status).toBe(404);
+  });
+});
+
+describe("override wait (admin resume without resubmission)", () => {
+  it("resumes at the kicking stage on the same version, then allows a fresh decision", async () => {
+    const { projectId } = await makeProject();
+    const advance = await decideReview({
+      projectId,
+      stage: "content_review",
+      decision: "advanced",
+      checklist: {},
+      notes: null,
+      adminId,
+    });
+    expect(advance.ok).toBe(true);
+    const bounce = await decideReview({
+      projectId,
+      stage: "campaign_review",
+      decision: "changes_requested",
+      checklist: {},
+      notes: "Needs the paid-for disclaimer.",
+      adminId,
+    });
+    expect(bounce.ok).toBe(true);
+
+    const override = await overrideWait({ projectId, adminId });
+    expect(override.ok).toBe(true);
+    if (override.ok) expect(override.value.newStatus).toBe("campaign_review");
+
+    const [project] = await db.select().from(projects).where(eq(projects.id, projectId));
+    expect(project!.status).toBe("campaign_review");
+    expect(project!.changesRequestedFrom).toBeNull();
+
+    // Same version, no new submission_versions row.
+    const versions = await db
+      .select()
+      .from(submissionVersions)
+      .where(eq(submissionVersions.projectId, projectId));
+    expect(versions).toHaveLength(1);
+
+    // The stage can be decided again (upsert over the changes_requested row).
+    const redecide = await decideReview({
+      projectId,
+      stage: "campaign_review",
+      decision: "advanced",
+      checklist: {},
+      notes: null,
+      adminId,
+    });
+    expect(redecide.ok).toBe(true);
+
+    const events2 = await db.select().from(events).where(eq(events.projectId, projectId));
+    expect(events2.map((e) => e.eventType)).toContain("changes_request.overridden");
+  });
+
+  it("rejects an override when the project is not waiting on the vendor", async () => {
+    const { projectId } = await makeProject();
+    const result = await overrideWait({ projectId, adminId });
+    expect(result.ok).toBe(false);
   });
 });
 

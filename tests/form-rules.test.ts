@@ -41,6 +41,7 @@ describe("district suggestions per office", () => {
   });
 
   it("numbered districts match each chamber", () => {
+    expect(districtOptionsFor("us_house").options).toEqual(["1", "2", "3", "4"]);
     expect(districtOptionsFor("state_board_of_education").options).toHaveLength(10);
     expect(districtOptionsFor("state_senate").options).toHaveLength(40);
     expect(districtOptionsFor("state_house").options).toHaveLength(125);

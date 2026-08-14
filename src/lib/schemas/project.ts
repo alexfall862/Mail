@@ -7,6 +7,7 @@ import { FILE_KINDS } from "@/lib/uploads";
 
 export const OFFICES = [
   { value: "us_senate", label: "U.S. Senate" },
+  { value: "us_house", label: "U.S. House" },
   { value: "governor", label: "Governor" },
   { value: "secretary_of_state", label: "Secretary of State" },
   { value: "attorney_general", label: "Attorney General" },
@@ -32,6 +33,7 @@ export function officeLabel(value: Office): string {
 
 /** §9: offices where district_detail is required. */
 export const DISTRICT_REQUIRED_OFFICES: readonly Office[] = [
+  "us_house",
   "state_senate",
   "state_house",
   "county_party",
@@ -42,10 +44,10 @@ export const DISTRICT_REQUIRED_OFFICES: readonly Office[] = [
 export const DISTRICT_DETAIL_LABEL = "District";
 
 export const DISTRICT_TOOLTIP =
-  'What to enter: statewide races use "Statewide". State Board of Education, ' +
-  "State Senate, and State House use the district number. County Party uses " +
-  "the county name. For municipal or other offices, describe the district, " +
-  "county, or office.";
+  'What to enter: statewide races use "Statewide". U.S. House, State Board ' +
+  "of Education, State Senate, and State House use the district number. " +
+  "County Party uses the county name. For municipal or other offices, " +
+  "describe the district, county, or office.";
 
 export const VENDOR_ROLES = [
   { value: "designer_consultant", label: "Designer / Consultant" },

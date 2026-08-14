@@ -29,9 +29,11 @@ export async function sendAndLog(
   projectId: string | null,
   to: string[],
   content: EmailContent,
+  opts: { cc?: string[] } = {},
 ): Promise<void> {
   if (to.length === 0) return;
-  const base = { template: content.template, recipients: to };
+  const cc = [...new Set(opts.cc ?? [])].filter((e) => !to.includes(e));
+  const base = { template: content.template, recipients: to, cc };
   try {
     const api = resend();
     if (!api) {
@@ -40,6 +42,7 @@ export async function sendAndLog(
     const { data, error } = await api.emails.send({
       from: process.env.EMAIL_FROM ?? "KDP Mail Program <onboarding@resend.dev>",
       to,
+      cc: cc.length > 0 ? cc : undefined,
       subject: content.subject,
       html: content.html,
       text: content.text,

@@ -76,6 +76,10 @@ export type TransitionInput =
   | { kind: "review_decision"; stage: ReviewStage; decision: ReviewDecision }
   /** Row 7 — vendor resubmits via magic link; routing rule applies. */
   | { kind: "vendor_resubmit"; artworkChanged: boolean }
+  /** Admin override: resume review at the kicking stage without a
+   * resubmission (e.g. the "requested change" was a misunderstanding).
+   * No emails; same version. */
+  | { kind: "admin_resume_review" }
   /** Row 10 — superuser reopen with required reason. */
   | { kind: "superuser_reopen"; actorIsSuperuser: boolean; reason: string };
 
@@ -164,6 +168,20 @@ export function transition(
         status: input.artworkChanged ? "content_review" : from,
         changesRequestedFrom: null,
       });
+    }
+
+    case "admin_resume_review": {
+      if (current.status !== "changes_requested") {
+        return alreadyMoved(current.status);
+      }
+      const stage = current.changesRequestedFrom;
+      if (stage === null || !isReviewStage(stage)) {
+        return err(
+          "invalid_state",
+          "Project is awaiting changes but has no valid originating stage recorded.",
+        );
+      }
+      return ok({ status: stage, changesRequestedFrom: null });
     }
 
     case "superuser_reopen": {

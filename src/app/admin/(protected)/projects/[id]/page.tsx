@@ -21,6 +21,7 @@ import {
   CampaignContactCard,
   CampaignReviewEmailButton,
   DeleteProjectButton,
+  OverrideWaitButton,
   PaidCheckbox,
   RegenerateLinkButton,
   ReopenButton,
@@ -196,11 +197,22 @@ export default async function AdminProjectPage({
       )}
       {status === "changes_requested" && (
         <section className="rounded-lg border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900">
-          Waiting on the vendor: changes were requested from{" "}
-          <strong>
-            {STATUS_LABELS[project.changesRequestedFrom as ProjectStatus]}
-          </strong>
-          . The project resumes when they resubmit through their link.
+          <p>
+            Waiting on the vendor: changes were requested from{" "}
+            <strong>
+              {STATUS_LABELS[project.changesRequestedFrom as ProjectStatus]}
+            </strong>
+            . The project resumes when they resubmit through their link.
+          </p>
+          <div className="mt-3">
+            <OverrideWaitButton
+              projectId={project.id}
+              stageLabel={
+                STATUS_LABELS[project.changesRequestedFrom as ProjectStatus] ??
+                "the previous stage"
+              }
+            />
+          </div>
         </section>
       )}
 
@@ -423,6 +435,8 @@ function describeEvent(
       return `Reopened${who}: ${String(payload.reason ?? "")}`;
     case "campaign_contact.updated":
       return `Campaign contact set to ${String(payload.name ?? "?")} (${String(payload.email ?? "?")})${who}`;
+    case "changes_request.overridden":
+      return `Wait overridden${who}: review resumed at ${String(payload.resumedStage ?? "?")}`;
     default:
       return type;
   }

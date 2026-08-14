@@ -178,6 +178,37 @@ describe("resubmission routing rule (§5 row 7) — both branches", () => {
   });
 });
 
+describe("admin resume review (override the changes_requested wait)", () => {
+  for (const from of REVIEW_STAGES) {
+    it(`changes_requested (from ${from}) resumes at ${from}`, () => {
+      const next = expectOk(
+        transition(state("changes_requested", from), {
+          kind: "admin_resume_review",
+        }),
+      );
+      expect(next).toEqual({ status: from, changesRequestedFrom: null });
+    });
+  }
+
+  it("rejects resume from every status except changes_requested", () => {
+    for (const s of PROJECT_STATUSES) {
+      if (s === "changes_requested") continue;
+      const result = transition(state(s), { kind: "admin_resume_review" });
+      expect(result.ok, `resume from ${s} must fail`).toBe(false);
+    }
+  });
+
+  it("rejects resume when the originating stage is missing or invalid", () => {
+    for (const bad of [null, "submitted", "approved"] as const) {
+      const result = transition(state("changes_requested", bad), {
+        kind: "admin_resume_review",
+      });
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.code).toBe("invalid_state");
+    }
+  });
+});
+
 describe("superuser reopen (§5 row 10)", () => {
   for (const s of ["approved", "denied"] as const) {
     it(`${s} → final_review with superuser + reason`, () => {
@@ -320,6 +351,7 @@ describe("whitelist exhaustiveness — no undeclared (from → to) edge is reach
       ),
       { kind: "vendor_resubmit", artworkChanged: true },
       { kind: "vendor_resubmit", artworkChanged: false },
+      { kind: "admin_resume_review" },
       {
         kind: "superuser_reopen",
         actorIsSuperuser: true,

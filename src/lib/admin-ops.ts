@@ -289,6 +289,58 @@ export async function regenerateLink(input: {
   return result;
 }
 
+/**
+ * Admin override of the changes_requested wait: resume review at the stage
+ * that requested changes, on the same version, with no emails. Used when a
+ * "requested change" turns out to be a misunderstanding cleared up out of
+ * band.
+ */
+export async function overrideWait(input: {
+  projectId: string;
+  adminId: string;
+}): Promise<OpResult<{ newStatus: ProjectStatus }>> {
+  return db.transaction(async (tx) => {
+    const project = await lockProject(tx, input.projectId);
+    if (!project) return fail(404, "Project not found.");
+
+    const result = transition(
+      {
+        status: project.status,
+        changesRequestedFrom: project.changesRequestedFrom,
+      },
+      { kind: "admin_resume_review" },
+    );
+    if (!result.ok) return fail(409, result.message);
+
+    await tx
+      .update(projects)
+      .set({
+        status: result.state.status,
+        changesRequestedFrom: null,
+        statusChangedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(projects.id, project.id));
+
+    await logEvent(tx, {
+      projectId: project.id,
+      actor: "admin",
+      actorId: input.adminId,
+      eventType: "changes_request.overridden",
+      payload: { resumedStage: result.state.status },
+    });
+    await logEvent(tx, {
+      projectId: project.id,
+      actor: "admin",
+      actorId: input.adminId,
+      eventType: "status.changed",
+      payload: { from: project.status, to: result.state.status },
+    });
+
+    return { ok: true as const, value: { newStatus: result.state.status } };
+  });
+}
+
 /** Set/approve the campaign contact on a ticket (admin-owned data). */
 export async function setCampaignContact(input: {
   projectId: string;

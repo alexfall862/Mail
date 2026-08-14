@@ -23,9 +23,14 @@ export type KnownCampaignContact = {
 
 export const KNOWN_CAMPAIGN_CONTACTS: KnownCampaignContact[] = [
   // 2026 cycle. Examples of the shape — replace with the real roster:
-  // { office: "us_senate", name: "Jane Smith", email: "jane@example.org", note: "Campaign manager" },
-  // { office: "governor", name: "Alex Lee", email: "alex@example.org", phone: "785-555-0100" },
-  // { office: "state_house", district: "42", name: "Sam Diaz", email: "sam@example.org" },
+  { office: "us_senate", name: "Jane Smith", email: "jane@example.org", note: "Campaign manager" },
+  { office: "attorney_general", name: "Jane Smith", email: "jane@example.org", note: "Campaign manager" },
+  { office: "us_senate", name: "Jane Smith", email: "jane@example.org", note: "Campaign manager" },
+  { office: "us_senate", name: "Jane Smith", email: "jane@example.org", note: "Campaign manager" },
+  { office: "us_senate", name: "Jane Smith", email: "jane@example.org", note: "Campaign manager" },
+  { office: "us_senate", name: "Jane Smith", email: "jane@example.org", note: "Campaign manager" },
+  { office: "us_senate", name: "Jane Smith", email: "jane@example.org", note: "Campaign manager" },
+
 ];
 
 export function suggestedContactsFor(
@@ -33,9 +38,17 @@ export function suggestedContactsFor(
   districtDetail: string | null,
 ): KnownCampaignContact[] {
   const district = districtDetail?.trim().toLowerCase() ?? "";
-  return KNOWN_CAMPAIGN_CONTACTS.filter((entry) => {
+  const matches = KNOWN_CAMPAIGN_CONTACTS.filter((entry) => {
     if (entry.office !== office) return false;
     if (entry.district === undefined) return true;
     return entry.district.trim().toLowerCase() === district;
+  });
+  // Tolerate duplicate rows in the hand-edited roster.
+  const seen = new Set<string>();
+  return matches.filter((entry) => {
+    const key = `${entry.name}|${entry.email}`.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
   });
 }

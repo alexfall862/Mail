@@ -25,6 +25,7 @@ import {
 
 export const officeType = pgEnum("office_type", [
   "us_senate",
+  "us_house",
   "governor",
   "secretary_of_state",
   "attorney_general",

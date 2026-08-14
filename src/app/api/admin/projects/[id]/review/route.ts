@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import { decideReview } from "@/lib/admin-ops";
 import { guardAdminRequest } from "@/lib/admin-api";
-import { projectEmailContext, sendAndLog } from "@/lib/email/send";
+import {
+  activeAdminEmails,
+  projectEmailContext,
+  sendAndLog,
+} from "@/lib/email/send";
 import {
   vendorApproved,
   vendorChangesRequested,
@@ -38,8 +42,15 @@ export async function POST(
   if (!result.ok) return jsonError(result.status, result.message);
 
   // §12 templates 3–6, chosen by the exact transition; sent after commit.
+  // Admin team is CC'd by default; the panel can toggle that and add
+  // additional parties.
   const ctx = await projectEmailContext(id);
   if (ctx) {
+    const { emailOptions } = parsed.data;
+    const cc = [
+      ...(emailOptions.ccAdmins ? await activeAdminEmails() : []),
+      ...emailOptions.extraCc,
+    ];
     const { stage, decision, notes, newStatus } = result.value;
     const stageLabel = STATUS_LABELS[stage];
     if (ctx.magicLink === null) {
@@ -68,7 +79,7 @@ export async function POST(
     } else {
       content = vendorDenied(ctx.summary, notes ?? "", ctx.magicLink);
     }
-    await sendAndLog(id, ctx.primaries, content);
+    await sendAndLog(id, ctx.primaries, content, { cc });
   }
 
   return NextResponse.json({ ok: true, newStatus: result.value.newStatus });

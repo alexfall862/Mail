@@ -1,0 +1,1 @@
+ALTER TYPE "public"."office_type" ADD VALUE 'us_house' BEFORE 'governor';

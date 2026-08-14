@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import { regenerateLink } from "@/lib/admin-ops";
 import { guardAdminRequest } from "@/lib/admin-api";
-import { projectEmailContext, sendAndLog } from "@/lib/email/send";
+import {
+  activeAdminEmails,
+  projectEmailContext,
+  sendAndLog,
+} from "@/lib/email/send";
 import { vendorLinkRegenerated } from "@/lib/email/templates";
 import { jsonError } from "@/lib/http";
 import { vendorLinkUrl } from "@/lib/tokens";
@@ -28,6 +32,7 @@ export async function POST(
       id,
       ctx.primaries,
       vendorLinkRegenerated(ctx.summary, vendorLinkUrl(result.value.rawToken)),
+      { cc: await activeAdminEmails() },
     );
   }
 

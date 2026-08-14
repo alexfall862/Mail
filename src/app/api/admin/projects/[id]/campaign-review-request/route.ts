@@ -8,9 +8,14 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { contacts, projects } from "@/db/schema";
 import { guardAdminRequest } from "@/lib/admin-api";
-import { projectEmailContext, sendAndLog } from "@/lib/email/send";
+import {
+  activeAdminEmails,
+  projectEmailContext,
+  sendAndLog,
+} from "@/lib/email/send";
 import { campaignReviewRequest } from "@/lib/email/templates";
 import { jsonError } from "@/lib/http";
+import { emailOptionsSchema } from "@/lib/schemas/admin";
 
 export async function POST(
   request: Request,
@@ -19,6 +24,12 @@ export async function POST(
   const guard = await guardAdminRequest(request);
   if ("response" in guard) return guard.response;
   const { id } = await params;
+
+  const body = await request.json().catch(() => ({}));
+  const options = emailOptionsSchema.safeParse(
+    (body as { emailOptions?: unknown }).emailOptions ?? {},
+  );
+  if (!options.success) return jsonError(400, "Invalid additional email address.");
 
   const [project] = await db
     .select({
@@ -51,10 +62,15 @@ export async function POST(
       .where(and(eq(contacts.projectId, id), eq(contacts.isPrimary, true)))
   ).map((c) => c.orgName);
 
+  const cc = [
+    ...(options.data.ccAdmins ? await activeAdminEmails() : []),
+    ...options.data.extraCc,
+  ];
   await sendAndLog(
     id,
     [project.campaignContactEmail],
     campaignReviewRequest(ctx.summary, primaryOrgs, ctx.magicLink),
+    { cc },
   );
 
   return NextResponse.json({ ok: true });

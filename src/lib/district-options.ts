@@ -50,6 +50,8 @@ export function districtOptionsFor(office: Office | ""): DistrictOptions {
     return { prefill: "Statewide", options: ["Statewide"] };
   }
   switch (office) {
+    case "us_house":
+      return { prefill: null, options: range(4) };
     case "state_board_of_education":
       return { prefill: null, options: range(10) };
     case "state_senate":
