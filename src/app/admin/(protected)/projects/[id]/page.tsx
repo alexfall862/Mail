@@ -20,6 +20,7 @@ import type { AiReviewResult } from "@/lib/ai-review";
 import { suggestedContactsFor } from "@/lib/campaign-contacts";
 import { AiReviewPanel, type AiReviewEventView } from "./ai-review-panel";
 import { allReviewerContacts } from "@/lib/reviewer-contacts";
+import { listReviewFeedback } from "@/lib/review-invites";
 import {
   CampaignContactCard,
   CampaignReviewEmailButton,
@@ -91,6 +92,7 @@ export default async function AdminProjectPage({
   const view = await getAdminProjectView(id);
   if (!view) notFound();
   const { project, contacts, versions, reviews, events } = view;
+  const feedback = await listReviewFeedback(id);
 
   const status = project.status as ProjectStatus;
   const currentVersion = versions.find((v) => v.id === project.currentVersionId);
@@ -211,8 +213,9 @@ export default async function AdminProjectPage({
                   </p>
                   <p className="mb-3 mt-0.5 text-xs text-gray-600">
                     The formal &quot;KDP is investing in your race&quot; email
-                    to the campaign contact, with the scheduled mail date and
-                    the status link.
+                    to the campaign contact, with their private review link.
+                    Approving on that page records the sign-off and moves the
+                    project to legal review on its own.
                   </p>
                   <CampaignReviewEmailButton
                     projectId={project.id}
@@ -229,6 +232,81 @@ export default async function AdminProjectPage({
                 </p>
               ))}
           </div>
+        </section>
+      )}
+
+      {/* Reviewer feedback recorded via /r/{token} links (informational,
+          except a campaign sign-off which advances the project itself). */}
+      {feedback.length > 0 && (
+        <section className="rounded-lg border border-gray-200 bg-white p-5">
+          <h2 className="text-lg font-semibold text-gray-900">
+            Reviewer feedback
+          </h2>
+          <p className="mt-1 text-sm text-gray-600">
+            Responses recorded on personal review links. Links work only while
+            the project sits at the stage they were sent for.
+          </p>
+          <ul className="mt-4 space-y-2 text-sm">
+            {feedback.map(({ invite, responses }) => {
+              const live =
+                invite.revokedAt === null && status === invite.stage;
+              return (
+                <li
+                  key={invite.id}
+                  className="rounded-md border border-gray-200 p-3"
+                >
+                  <p className="font-medium text-gray-900">
+                    {invite.recipientName || invite.recipientEmail}
+                    <span className="ml-1 font-normal text-gray-500">
+                      {invite.recipientName ? `(${invite.recipientEmail}) ` : ""}·{" "}
+                      {STATUS_LABELS[invite.stage as ProjectStatus]}
+                      {invite.role === "campaign_contact"
+                        ? " · campaign contact"
+                        : ""}{" "}
+                      · sent {formatDateTime(invite.createdAt)}
+                    </span>
+                    {invite.revokedAt !== null && (
+                      <span className="ml-2 rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-600">
+                        link replaced
+                      </span>
+                    )}
+                  </p>
+                  {responses.length === 0 ? (
+                    <p className="mt-1 text-gray-500 italic">
+                      {live ? "Awaiting response." : "No response recorded."}
+                    </p>
+                  ) : (
+                    responses.map((r) => (
+                      <div key={r.id} className="mt-2">
+                        <p>
+                          <span
+                            className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                              r.decision === "approved"
+                                ? "bg-green-100 text-green-800"
+                                : "bg-amber-100 text-amber-800"
+                            }`}
+                          >
+                            {r.decision === "approved"
+                              ? "Approved"
+                              : "Flagged an issue"}
+                          </span>
+                          <span className="ml-2 text-gray-500">
+                            v{r.versionNumber ?? "?"} ·{" "}
+                            {formatDateTime(r.createdAt)}
+                          </span>
+                        </p>
+                        {r.notes && (
+                          <p className="mt-1 whitespace-pre-line text-gray-700">
+                            {r.notes}
+                          </p>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </li>
+              );
+            })}
+          </ul>
         </section>
       )}
 
@@ -546,7 +624,11 @@ function describeEvent(
     case "project.created":
       return "Submission received";
     case "status.changed":
-      return `Status: ${String(payload.from ?? "?")} → ${String(payload.to ?? "?")}${who}`;
+      return `Status: ${String(payload.from ?? "?")} → ${String(payload.to ?? "?")}${
+        payload.via === "campaign_signoff"
+          ? ` (campaign sign-off by ${String(payload.email ?? "?")})`
+          : who
+      }`;
     case "version.submitted":
       return `Version ${String(payload.versionNumber ?? "?")} submitted`;
     case "review.decided":
@@ -575,6 +657,8 @@ function describeEvent(
       return `Campaign contact set to ${String(payload.name ?? "?")} (${String(payload.email ?? "?")})${who}`;
     case "changes_request.overridden":
       return `Wait overridden${who}: review resumed at ${String(payload.resumedStage ?? "?")}`;
+    case "review_response.submitted":
+      return `Feedback from ${String(payload.name ?? "") || String(payload.email ?? "?")} at ${String(payload.stage ?? "?")}: ${payload.decision === "approved" ? "approved" : "flagged an issue"}`;
     default:
       return type;
   }

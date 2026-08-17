@@ -15,6 +15,7 @@ import {
 } from "@/lib/email/send";
 import { campaignReviewRequest } from "@/lib/email/templates";
 import { jsonError } from "@/lib/http";
+import { createReviewInvites } from "@/lib/review-invites";
 import { emailOptionsSchema } from "@/lib/schemas/admin";
 
 export async function POST(
@@ -35,6 +36,7 @@ export async function POST(
     .select({
       status: projects.status,
       campaignContactEmail: projects.campaignContactEmail,
+      campaignContactName: projects.campaignContactName,
     })
     .from(projects)
     .where(eq(projects.id, id));
@@ -62,6 +64,21 @@ export async function POST(
       .where(and(eq(contacts.projectId, id), eq(contacts.isPrimary, true)))
   ).map((c) => c.orgName);
 
+  // Personal review link: the contact approves (or flags issues) directly on
+  // the page, and an approval advances the project out of campaign review.
+  // Re-sending rotates the link; the previously emailed one stops working.
+  const [invite] = await createReviewInvites({
+    projectId: id,
+    stage: "campaign_review",
+    recipients: [
+      {
+        email: project.campaignContactEmail,
+        name: project.campaignContactName,
+        role: "campaign_contact",
+      },
+    ],
+  });
+
   const cc = [
     ...(options.data.ccAdmins ? await activeAdminEmails() : []),
     ...options.data.extraCc,
@@ -69,7 +86,7 @@ export async function POST(
   await sendAndLog(
     id,
     [project.campaignContactEmail],
-    campaignReviewRequest(ctx.summary, primaryOrgs, ctx.magicLink),
+    campaignReviewRequest(ctx.summary, primaryOrgs, invite!.url),
     { cc },
   );
 

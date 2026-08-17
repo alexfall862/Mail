@@ -2,7 +2,7 @@
 import { events } from "@/db/schema";
 import type { Db, Tx } from "@/db";
 
-export type EventActor = "admin" | "vendor" | "system";
+export type EventActor = "admin" | "vendor" | "system" | "reviewer";
 
 export async function logEvent(
   db: Db | Tx,

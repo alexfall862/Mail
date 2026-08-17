@@ -634,7 +634,7 @@ export function ReviewerNoticeButtons({
           onClick={async () => {
             const summary = adminOnly
               ? "No reviewers are selected. Send the notice to the admin team only?"
-              : `Email ${chosen.map((c) => c.name).join(", ")} asking them to review this piece? The email includes the status link and the scheduled mail date.`;
+              : `Email ${chosen.map((c) => c.name).join(", ")} asking them to review this piece? Each gets their own private review link (one email per person) where their feedback is logged.`;
             if (!window.confirm(summary)) return;
             setBusy(true);
             setMessage(null);
@@ -700,7 +700,7 @@ export function CampaignReviewEmailButton({
           onClick={async () => {
             if (
               !window.confirm(
-                `Email ${contactName} (${contactEmail}) asking the campaign to review this piece? The email includes the status link and the scheduled mail date.`,
+                `Email ${contactName} (${contactEmail}) asking the campaign to review this piece? Their private review link lets them approve it directly — approval moves the project to legal review on its own.`,
               )
             )
               return;

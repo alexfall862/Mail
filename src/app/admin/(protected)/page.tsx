@@ -1,6 +1,7 @@
 import Link from "next/link";
-import { getDashboardRows } from "@/lib/admin-ops";
+import { getDashboardRows, type DashboardRow } from "@/lib/admin-ops";
 import { formatDate, formatMoney } from "@/lib/format";
+import { daysUntil, scheduleSlack, urgencyTier } from "@/lib/priority";
 import { officeLabel, type Office } from "@/lib/schemas/project";
 import {
   PROJECT_STATUSES,
@@ -12,15 +13,6 @@ export const metadata = { title: "Dashboard - KDP Mail Approval" };
 export const dynamic = "force-dynamic";
 
 const TERMINAL: ProjectStatus[] = ["approved", "denied"];
-
-/** §8: red flag on any non-terminal project with mail_date ≤ 10 days out. */
-function isUrgent(status: ProjectStatus, mailDate: string): boolean {
-  if (TERMINAL.includes(status)) return false;
-  const [y, m, d] = mailDate.split("-").map(Number);
-  const due = new Date(y!, m! - 1, d!);
-  const days = (due.getTime() - Date.now()) / (24 * 60 * 60 * 1000);
-  return days <= 10;
-}
 
 const STATUS_BADGE: Record<ProjectStatus, string> = {
   submitted: "bg-gray-100 text-gray-800",
@@ -45,6 +37,19 @@ export default async function AdminDashboardPage({
     ? (status as ProjectStatus)
     : undefined;
   const rows = await getDashboardRows(statusFilter);
+
+  // Active work ranked by schedule slack (least room first); approved and
+  // denied kept out of the way in their own tables.
+  const now = new Date();
+  const bySlack = (a: DashboardRow, b: DashboardRow) =>
+    scheduleSlack(a.status, a.changesRequestedFrom, a.mailDate, now) -
+      scheduleSlack(b.status, b.changesRequestedFrom, b.mailDate, now) ||
+    a.mailDate.localeCompare(b.mailDate);
+  const active = rows
+    .filter((r) => !TERMINAL.includes(r.status))
+    .sort(bySlack);
+  const approved = rows.filter((r) => r.status === "approved");
+  const denied = rows.filter((r) => r.status === "denied");
 
   return (
     <div>
@@ -73,84 +78,181 @@ export default async function AdminDashboardPage({
                 No submissions yet
               </p>
               <p className="mt-2">
-                When a vendor submits a mail piece it appears here, sorted by
-                mail date.
+                When a vendor submits a mail piece it appears here, most
+                urgent first.
               </p>
             </>
           )}
         </div>
+      ) : statusFilter ? (
+        <ProjectTable
+          rows={TERMINAL.includes(statusFilter) ? rows : active}
+          showUrgency={!TERMINAL.includes(statusFilter)}
+          now={now}
+        />
       ) : (
-        <div className="mt-6 overflow-x-auto rounded-lg border border-gray-200 bg-white">
-          <table className="w-full text-left text-sm">
-            <thead className="border-b border-gray-200 bg-gray-50 text-xs uppercase text-gray-500">
-              <tr>
-                <th className="px-4 py-3">Candidate</th>
-                <th className="px-4 py-3">Office</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3">Mail date</th>
-                <th className="px-4 py-3 text-right">Pieces</th>
-                <th className="px-4 py-3 text-right">Cost</th>
-                <th className="px-4 py-3">Paid</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {rows.map((row) => (
-                <tr key={row.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 font-medium">
-                    <Link
-                      href={`/admin/projects/${row.id}`}
-                      className="text-blue-700 hover:underline"
-                    >
-                      {row.candidateSupported}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-3 text-gray-600">
-                    {officeLabel(row.office as Office)}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_BADGE[row.status]}`}
-                    >
-                      {STATUS_LABELS[row.status]}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 whitespace-nowrap">
-                    {isUrgent(row.status, row.mailDate) && (
-                      <span
-                        className="mr-1 inline-block h-2.5 w-2.5 rounded-full bg-red-600 align-middle"
-                        title="Mail date is 10 days out or less"
-                      />
-                    )}
-                    {formatDate(row.mailDate)}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    {row.pieceCount.toLocaleString()}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    {formatMoney(row.totalCostCents)}
-                  </td>
-                  <td className="px-4 py-3">
-                    {row.paidNeeded === 0 ? (
-                      <span className="text-gray-400">-</span>
-                    ) : (
-                      <span
-                        className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                          row.paidDone === row.paidNeeded
-                            ? "bg-green-100 text-green-800"
-                            : "bg-amber-100 text-amber-800"
-                        }`}
-                      >
-                        {row.paidDone}/{row.paidNeeded} paid
-                      </span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <>
+          <SectionHeading
+            title="In review"
+            count={active.length}
+            hint="ranked by how tight the schedule is: days until the mail date vs. review stages left"
+          />
+          {active.length === 0 ? (
+            <p className="mt-3 text-sm text-gray-500">
+              Nothing in review right now.
+            </p>
+          ) : (
+            <ProjectTable rows={active} showUrgency now={now} />
+          )}
+
+          {approved.length > 0 && (
+            <>
+              <SectionHeading title="Approved" count={approved.length} />
+              <ProjectTable rows={approved} showUrgency={false} now={now} />
+            </>
+          )}
+
+          {denied.length > 0 && (
+            <>
+              <SectionHeading title="Denied" count={denied.length} />
+              <ProjectTable rows={denied} showUrgency={false} now={now} />
+            </>
+          )}
+        </>
       )}
     </div>
+  );
+}
+
+function SectionHeading({
+  title,
+  count,
+  hint,
+}: {
+  title: string;
+  count: number;
+  hint?: string;
+}) {
+  return (
+    <div className="mt-8 flex flex-wrap items-baseline gap-2">
+      <h2 className="text-lg font-semibold text-gray-900">
+        {title} <span className="font-normal text-gray-500">({count})</span>
+      </h2>
+      {hint && <p className="text-xs text-gray-500">{hint}</p>}
+    </div>
+  );
+}
+
+function ProjectTable({
+  rows,
+  showUrgency,
+  now,
+}: {
+  rows: DashboardRow[];
+  showUrgency: boolean;
+  now: Date;
+}) {
+  return (
+    <div className="mt-3 overflow-x-auto rounded-lg border border-gray-200 bg-white">
+      <table className="w-full text-left text-sm">
+        <thead className="border-b border-gray-200 bg-gray-50 text-xs uppercase text-gray-500">
+          <tr>
+            <th className="px-4 py-3">Candidate</th>
+            <th className="px-4 py-3">Office</th>
+            <th className="px-4 py-3">Status</th>
+            <th className="px-4 py-3">Mail date</th>
+            {showUrgency && <th className="px-4 py-3">Days left</th>}
+            <th className="px-4 py-3 text-right">Pieces</th>
+            <th className="px-4 py-3 text-right">Cost</th>
+            <th className="px-4 py-3">Paid</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-gray-100">
+          {rows.map((row) => (
+            <tr key={row.id} className="hover:bg-gray-50">
+              <td className="px-4 py-3 font-medium">
+                <Link
+                  href={`/admin/projects/${row.id}`}
+                  className="text-blue-700 hover:underline"
+                >
+                  {row.candidateSupported}
+                </Link>
+              </td>
+              <td className="px-4 py-3 text-gray-600">
+                {officeLabel(row.office as Office)}
+              </td>
+              <td className="px-4 py-3">
+                <span
+                  className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_BADGE[row.status]}`}
+                >
+                  {STATUS_LABELS[row.status]}
+                </span>
+              </td>
+              <td className="px-4 py-3 whitespace-nowrap">
+                {formatDate(row.mailDate)}
+              </td>
+              {showUrgency && (
+                <td className="px-4 py-3 whitespace-nowrap">
+                  <DaysLeftChip row={row} now={now} />
+                </td>
+              )}
+              <td className="px-4 py-3 text-right">
+                {row.pieceCount.toLocaleString()}
+              </td>
+              <td className="px-4 py-3 text-right">
+                {formatMoney(row.totalCostCents)}
+              </td>
+              <td className="px-4 py-3">
+                {row.paidNeeded === 0 ? (
+                  <span className="text-gray-400">-</span>
+                ) : (
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                      row.paidDone === row.paidNeeded
+                        ? "bg-green-100 text-green-800"
+                        : "bg-amber-100 text-amber-800"
+                    }`}
+                  >
+                    {row.paidDone}/{row.paidNeeded} paid
+                  </span>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/** Days until mail, colored by whether the remaining stages still fit. */
+function DaysLeftChip({ row, now }: { row: DashboardRow; now: Date }) {
+  const daysLeft = daysUntil(row.mailDate, now);
+  const slack = scheduleSlack(
+    row.status,
+    row.changesRequestedFrom,
+    row.mailDate,
+    now,
+  );
+  const tier = urgencyTier(daysLeft, slack);
+  const style =
+    tier === "red"
+      ? "bg-red-100 text-red-800"
+      : tier === "amber"
+        ? "bg-amber-100 text-amber-800"
+        : "bg-gray-100 text-gray-600";
+  const label = daysLeft < 0 ? `${-daysLeft}d overdue` : `${daysLeft}d`;
+  const title =
+    slack < 0
+      ? "The remaining review stages no longer fit before the mail date"
+      : `About ${slack} day${slack === 1 ? "" : "s"} of slack after the remaining review stages`;
+  return (
+    <span
+      title={title}
+      className={`rounded-full px-2 py-0.5 text-xs font-medium ${style}`}
+    >
+      {label}
+    </span>
   );
 }
 

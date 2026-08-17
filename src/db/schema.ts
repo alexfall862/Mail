@@ -63,7 +63,17 @@ export const fileKind = pgEnum("file_kind", [
   "invoice",
 ]);
 
-export const actorType = pgEnum("actor_type", ["admin", "vendor", "system"]);
+export const actorType = pgEnum("actor_type", [
+  "admin",
+  "vendor",
+  "system",
+  "reviewer",
+]);
+
+export const reviewInviteRole = pgEnum("review_invite_role", [
+  "outside_reviewer",
+  "campaign_contact",
+]);
 
 export const admins = pgTable("admins", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -243,6 +253,67 @@ export const stageReviews = pgTable(
     // One decision per stage per version.
     unique().on(table.versionId, table.stage),
     index("idx_reviews_project").on(table.projectId, table.decidedAt),
+  ],
+);
+
+/**
+ * Per-recipient review magic links (post-spec amendment, 2026-08-17). One row
+ * per (recipient, stage) send; re-sending revokes the prior invite for the
+ * same recipient+stage and issues a fresh token. A link is usable only while
+ * the project still sits at the invite's stage (checked at read/submit time,
+ * not via a revocation sweep), so feedback can never race a stage change.
+ * Raw tokens are never stored — sha256 only, like the vendor token.
+ */
+export const reviewInvites = pgTable(
+  "review_invites",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    // Review stages only (enforced in app code, like stage_reviews.stage).
+    stage: projectStatus("stage").notNull(),
+    role: reviewInviteRole("role").notNull(),
+    recipientEmail: text("recipient_email").notNull(),
+    recipientName: text("recipient_name").notNull().default(""),
+    tokenHash: text("token_hash").notNull().unique(), // sha256(raw)
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }), // superseded by a re-send
+  },
+  (table) => [index("idx_review_invites_project").on(table.projectId)],
+);
+
+/** What an invited reviewer entered on their review page. One response per
+ * invite per version (they may revise it while the stage is still open). */
+export const reviewResponses = pgTable(
+  "review_responses",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    inviteId: uuid("invite_id")
+      .notNull()
+      .references(() => reviewInvites.id, { onDelete: "cascade" }),
+    // Denormalized for the admin feedback panel, like files.project_id.
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    versionId: uuid("version_id")
+      .notNull()
+      .references(() => submissionVersions.id, { onDelete: "cascade" }),
+    decision: text("decision").notNull(),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    check(
+      "review_responses_decision_check",
+      sql`${table.decision} in ('approved','issues')`,
+    ),
+    unique().on(table.inviteId, table.versionId),
+    index("idx_review_responses_project").on(table.projectId),
   ],
 );
 

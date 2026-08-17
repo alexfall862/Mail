@@ -13,6 +13,7 @@ export const LIMITS = {
   submission: { max: 5, windowMs: 60 * 60 * 1000 }, // 5/hour per IP
   tokenLookup: { max: 30, windowMs: 60 * 1000 }, // 30/min per IP
   login: { max: 5, windowMs: 15 * 60 * 1000 }, // 5/15min per (IP, email)
+  reviewResponse: { max: 20, windowMs: 60 * 60 * 1000 }, // 20/hour per IP
 } as const;
 
 export type LimitName = keyof typeof LIMITS;

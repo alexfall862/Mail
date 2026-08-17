@@ -178,6 +178,24 @@ describe("resubmission routing rule (§5 row 7) — both branches", () => {
   });
 });
 
+describe("campaign sign-off (post-spec amendment 2026-08-17)", () => {
+  it("campaign_review → legal_review on the contact's approval", () => {
+    const next = expectOk(
+      transition(state("campaign_review"), { kind: "campaign_signoff" }),
+    );
+    expect(next).toEqual({ status: "legal_review", changesRequestedFrom: null });
+  });
+
+  it("is rejected from every status except campaign_review (stale link loses cleanly)", () => {
+    for (const s of PROJECT_STATUSES) {
+      if (s === "campaign_review") continue;
+      const result = transition(state(s), { kind: "campaign_signoff" });
+      expect(result.ok, `campaign_signoff from ${s} must fail`).toBe(false);
+      if (!result.ok) expect(result.message).toMatch(/already moved to/);
+    }
+  });
+});
+
 describe("admin resume review (override the changes_requested wait)", () => {
   for (const from of REVIEW_STAGES) {
     it(`changes_requested (from ${from}) resumes at ${from}`, () => {
@@ -351,6 +369,7 @@ describe("whitelist exhaustiveness — no undeclared (from → to) edge is reach
       ),
       { kind: "vendor_resubmit", artworkChanged: true },
       { kind: "vendor_resubmit", artworkChanged: false },
+      { kind: "campaign_signoff" },
       { kind: "admin_resume_review" },
       {
         kind: "superuser_reopen",

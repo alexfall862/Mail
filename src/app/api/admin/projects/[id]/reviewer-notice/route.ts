@@ -2,7 +2,9 @@
  * Admin-triggered review notice. Recipients may be any configured reviewer
  * (any stage's roster) or the project's campaign contact; with no recipients
  * selected the notice goes to the admin team only (quick internal heads-up
- * or testing). Re-sending is allowed; every send lands in the event timeline.
+ * or testing). Each outside recipient gets a personal /r/{token} review link
+ * (one email per person) so feedback they record is attributed; re-sending is
+ * allowed and rotates their link. Every send lands in the event timeline.
  */
 import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
@@ -17,6 +19,7 @@ import {
 } from "@/lib/email/send";
 import { reviewerNotice } from "@/lib/email/templates";
 import { jsonError } from "@/lib/http";
+import { createReviewInvites } from "@/lib/review-invites";
 import { allReviewerContacts } from "@/lib/reviewer-contacts";
 import { emailOptionsSchema } from "@/lib/schemas/admin";
 import { isReviewStage, STATUS_LABELS } from "@/lib/state-machine";
@@ -42,6 +45,7 @@ export async function POST(
     .select({
       status: projects.status,
       campaignContactEmail: projects.campaignContactEmail,
+      campaignContactName: projects.campaignContactName,
     })
     .from(projects)
     .where(eq(projects.id, id));
@@ -81,20 +85,52 @@ export async function POST(
 
   const admins = await activeAdminEmails();
   const adminOnly = requested.length === 0;
-  const to = adminOnly ? admins : requested;
-  const cc = adminOnly
-    ? parsed.data.emailOptions.extraCc
-    : [
-        ...(parsed.data.emailOptions.ccAdmins ? admins : []),
-        ...parsed.data.emailOptions.extraCc,
-      ];
+  const stageLabel = STATUS_LABELS[project.status];
 
-  await sendAndLog(
-    id,
-    to,
-    reviewerNotice(ctx.summary, STATUS_LABELS[project.status], ctx.magicLink),
-    { cc },
+  if (adminOnly) {
+    await sendAndLog(id, admins, reviewerNotice(ctx.summary, stageLabel, ctx.adminUrl), {
+      cc: parsed.data.emailOptions.extraCc,
+    });
+    return NextResponse.json({ ok: true, adminOnly });
+  }
+
+  // Each recipient gets their own /r/{token} review link so feedback they
+  // record on the page is attributed to them — one email per recipient
+  // (a shared CC'd send can't carry per-person links).
+  const nameByEmail = new Map(
+    allReviewerContacts().map((c) => [c.email.toLowerCase(), c.name]),
   );
+  const campaignEmail = project.campaignContactEmail.toLowerCase();
+  const invites = await createReviewInvites({
+    projectId: id,
+    stage: project.status,
+    recipients: requested.map((email) => {
+      const isCampaignContact = email.toLowerCase() === campaignEmail;
+      return {
+        email,
+        name: isCampaignContact
+          ? project.campaignContactName
+          : (nameByEmail.get(email.toLowerCase()) ?? ""),
+        role: isCampaignContact ? "campaign_contact" : "outside_reviewer",
+      };
+    }),
+  });
+
+  // CC list (admin team + extras) rides on the first send only — every send
+  // is individually logged in the event timeline, and N carbon copies of
+  // near-identical notices would drown the admin inbox.
+  const cc = [
+    ...(parsed.data.emailOptions.ccAdmins ? admins : []),
+    ...parsed.data.emailOptions.extraCc,
+  ];
+  for (const [i, invite] of invites.entries()) {
+    await sendAndLog(
+      id,
+      [invite.email],
+      reviewerNotice(ctx.summary, stageLabel, invite.url),
+      { cc: i === 0 ? cc : [] },
+    );
+  }
 
   return NextResponse.json({ ok: true, adminOnly });
 }

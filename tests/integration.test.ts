@@ -62,6 +62,12 @@ import {
 } from "@/lib/admin-ops";
 import { createProject, resubmitProject } from "@/lib/projects";
 import * as r2 from "@/lib/r2";
+import {
+  createReviewInvites,
+  getReviewInviteView,
+  listReviewFeedback,
+  submitReviewResponse,
+} from "@/lib/review-invites";
 import type { FileClaim, SubmitRequest } from "@/lib/schemas/project";
 import { hashVendorToken } from "@/lib/tokens";
 
@@ -650,6 +656,210 @@ describe("payment tracking, link rotation, dashboard", () => {
     if (result.ok) {
       expect(hashVendorToken(result.value.rawToken)).toBe(project!.vendorTokenHash);
     }
+  });
+});
+
+describe("review invites & feedback (post-spec amendment 2026-08-17)", () => {
+  const rawFrom = (url: string) => url.split("/r/")[1]!;
+
+  async function projectAtCampaignReview(): Promise<string> {
+    const { projectId } = await makeProject();
+    const r = await decideReview({
+      projectId,
+      stage: "content_review",
+      decision: "advanced",
+      checklist: {},
+      notes: null,
+      adminId,
+    });
+    expect(r.ok).toBe(true);
+    return projectId;
+  }
+
+  it("outside reviewer feedback is recorded but never moves the project", async () => {
+    const projectId = await projectAtCampaignReview();
+    const [invite] = await createReviewInvites({
+      projectId,
+      stage: "campaign_review",
+      recipients: [
+        { email: "Blair@Example.com", name: "Blair", role: "outside_reviewer" },
+      ],
+    });
+
+    const result = await submitReviewResponse({
+      rawToken: rawFrom(invite!.url),
+      decision: "approved",
+      notes: "No problems spotted.",
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.advanced).toBe(false);
+
+    const [project] = await db.select().from(projects).where(eq(projects.id, projectId));
+    expect(project!.status).toBe("campaign_review");
+
+    const feedback = await listReviewFeedback(projectId);
+    expect(feedback).toHaveLength(1);
+    expect(feedback[0]!.invite.recipientEmail).toBe("blair@example.com");
+    expect(feedback[0]!.responses).toHaveLength(1);
+    expect(feedback[0]!.responses[0]!.decision).toBe("approved");
+  });
+
+  it("campaign contact approval advances campaign_review → legal_review", async () => {
+    const projectId = await projectAtCampaignReview();
+    const [invite] = await createReviewInvites({
+      projectId,
+      stage: "campaign_review",
+      recipients: [
+        { email: "casey@campaign.example", name: "Casey", role: "campaign_contact" },
+      ],
+    });
+
+    const result = await submitReviewResponse({
+      rawToken: rawFrom(invite!.url),
+      decision: "approved",
+      notes: null,
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.advanced).toBe(true);
+      expect(result.value.newStatus).toBe("legal_review");
+    }
+    const [project] = await db.select().from(projects).where(eq(projects.id, projectId));
+    expect(project!.status).toBe("legal_review");
+
+    // The window closed with the advance: the same link can't be used again.
+    const again = await submitReviewResponse({
+      rawToken: rawFrom(invite!.url),
+      decision: "issues",
+      notes: "Changed my mind.",
+    });
+    expect(again.ok).toBe(false);
+    if (!again.ok) expect(again.message).toMatch(/closed/);
+  });
+
+  it("a campaign contact flagging issues does NOT move the project", async () => {
+    const projectId = await projectAtCampaignReview();
+    const [invite] = await createReviewInvites({
+      projectId,
+      stage: "campaign_review",
+      recipients: [
+        { email: "casey@campaign.example", name: "Casey", role: "campaign_contact" },
+      ],
+    });
+    const result = await submitReviewResponse({
+      rawToken: rawFrom(invite!.url),
+      decision: "issues",
+      notes: "The polling place listed is wrong.",
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.advanced).toBe(false);
+    const [project] = await db.select().from(projects).where(eq(projects.id, projectId));
+    expect(project!.status).toBe("campaign_review");
+  });
+
+  it("links stop working once the project leaves the stage", async () => {
+    const projectId = await projectAtCampaignReview();
+    const [invite] = await createReviewInvites({
+      projectId,
+      stage: "campaign_review",
+      recipients: [
+        { email: "blair@example.com", name: "Blair", role: "outside_reviewer" },
+      ],
+    });
+
+    const advance = await decideReview({
+      projectId,
+      stage: "campaign_review",
+      decision: "advanced",
+      checklist: {},
+      notes: null,
+      adminId,
+    });
+    expect(advance.ok).toBe(true);
+
+    const view = await getReviewInviteView(rawFrom(invite!.url));
+    expect(view!.open).toBe(false);
+
+    const result = await submitReviewResponse({
+      rawToken: rawFrom(invite!.url),
+      decision: "approved",
+      notes: null,
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.status).toBe(409);
+  });
+
+  it("re-sending revokes the earlier invite for the same recipient+stage", async () => {
+    const projectId = await projectAtCampaignReview();
+    const recipient = [
+      { email: "blair@example.com", name: "Blair", role: "outside_reviewer" as const },
+    ];
+    const [first] = await createReviewInvites({
+      projectId,
+      stage: "campaign_review",
+      recipients: recipient,
+    });
+    const [second] = await createReviewInvites({
+      projectId,
+      stage: "campaign_review",
+      recipients: recipient,
+    });
+
+    const staleView = await getReviewInviteView(rawFrom(first!.url));
+    expect(staleView!.open).toBe(false);
+    const stale = await submitReviewResponse({
+      rawToken: rawFrom(first!.url),
+      decision: "approved",
+      notes: null,
+    });
+    expect(stale.ok).toBe(false);
+
+    const fresh = await submitReviewResponse({
+      rawToken: rawFrom(second!.url),
+      decision: "approved",
+      notes: null,
+    });
+    expect(fresh.ok).toBe(true);
+  });
+
+  it("responding again for the same version updates the earlier response", async () => {
+    const projectId = await projectAtCampaignReview();
+    const [invite] = await createReviewInvites({
+      projectId,
+      stage: "campaign_review",
+      recipients: [
+        { email: "blair@example.com", name: "Blair", role: "outside_reviewer" },
+      ],
+    });
+    const raw = rawFrom(invite!.url);
+
+    const flag = await submitReviewResponse({
+      rawToken: raw,
+      decision: "issues",
+      notes: "Typo in the headline.",
+    });
+    expect(flag.ok).toBe(true);
+    const revise = await submitReviewResponse({
+      rawToken: raw,
+      decision: "approved",
+      notes: "Never mind — misread it.",
+    });
+    expect(revise.ok).toBe(true);
+
+    const feedback = await listReviewFeedback(projectId);
+    expect(feedback[0]!.responses).toHaveLength(1);
+    expect(feedback[0]!.responses[0]!.decision).toBe("approved");
+  });
+
+  it("unknown tokens are rejected", async () => {
+    expect(await getReviewInviteView("no-such-token")).toBeNull();
+    const result = await submitReviewResponse({
+      rawToken: "no-such-token",
+      decision: "approved",
+      notes: null,
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.status).toBe(404);
   });
 });
 

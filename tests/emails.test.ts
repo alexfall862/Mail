@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import {
+  adminCampaignApproved,
   adminNewSubmission,
   adminReopened,
   adminResubmission,
@@ -47,6 +48,7 @@ function adminTemplates(): EmailContent[] {
     adminNewSubmission(summary, ADMIN_URL),
     adminResubmission(summary, 2, "Changed the back", ADMIN_URL),
     adminReopened(summary, "Costs changed", "Alex", ADMIN_URL),
+    adminCampaignApproved(summary, "Sam Candidate", "sam@example.org", ADMIN_URL),
   ];
 }
 
@@ -118,6 +120,14 @@ describe("email templates (§12)", () => {
     expect(t.text).toContain("awaiting legal review");
     expect(t.text).toContain("Jane Doe");
     expect(t.text).toContain("Oct 12, 2026");
+  });
+
+  it("campaign sign-off notice names the contact and says the vendor wasn't emailed", () => {
+    const t = adminCampaignApproved(summary, "Sam Candidate", "sam@example.org", ADMIN_URL);
+    expect(t.subject).toContain("Campaign signed off");
+    expect(t.text).toContain("Sam Candidate (sam@example.org)");
+    expect(t.text).toContain("campaign review to legal review");
+    expect(t.text).toContain("vendor was not emailed");
   });
 
   it("html-escapes user-controlled fields", () => {
