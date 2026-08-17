@@ -30,7 +30,7 @@ export class ArtworkError extends Error {}
 const TOO_SMALL_MESSAGE =
   `This image is too small to review: its shortest side must be at least ${MIN_DIMENSION_PX} pixels. ` +
   "Try exporting the artwork at a higher resolution (150 DPI or more at the piece's printed size), " +
-  "or upload the print-ready PDF instead — PDFs are rendered at full review quality automatically.";
+  "or upload the print-ready PDF instead; PDFs are rendered at full review quality automatically.";
 
 /**
  * Process a separate-mode front or back file (image or PDF page 1).

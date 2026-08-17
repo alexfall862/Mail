@@ -74,8 +74,8 @@ export function ReviewForm({
       <div className="rounded-lg border border-green-300 bg-green-50 p-5 text-sm text-green-900">
         <p className="font-semibold">
           {done.advanced
-            ? "Thank you — your approval is recorded."
-            : "Thank you — your feedback is recorded."}
+            ? "Thank you! Your approval is recorded."
+            : "Thank you! Your feedback is recorded."}
         </p>
         <p className="mt-1">
           {done.advanced

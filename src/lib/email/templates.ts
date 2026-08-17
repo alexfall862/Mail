@@ -279,12 +279,12 @@ export function campaignReviewRequest(
   const bodyHtml =
     `<p style="${styles.p}">Congratulations. The Kansas Democratic Party has decided to invest in your race and will be printing and mailing a mail piece in support of your campaign.</p>` +
     `<p style="${styles.p}">We would like you to review it for any content that is not accurate, and to otherwise be aware that this mailer is currently scheduled to be sent on <strong>${esc(p.mailDateFormatted)}</strong>, working with ${esc(partners)}.</p>` +
-    `<p style="${styles.p}">The button below opens your private review page. If everything looks right, approve it there — your sign-off is recorded and the piece moves straight to the next review step. If something is off, flag the issue on the same page and the mail program team will follow up.</p>` +
+    `<p style="${styles.p}">The button below opens your private review page. If everything looks right, approve it there: your sign-off is recorded and the piece moves straight to the next review step. If something is off, flag the issue on the same page and the mail program team will follow up.</p>` +
     reviewButton;
   const text =
     `Congratulations. The Kansas Democratic Party has decided to invest in your race and will be printing and mailing a mail piece in support of your campaign.\n\n` +
     `We would like you to review it for any content that is not accurate, and to otherwise be aware that this mailer is currently scheduled to be sent on ${p.mailDateFormatted}, working with ${partners}.\n\n` +
-    `The link below opens your private review page. If everything looks right, approve it there — your sign-off is recorded and the piece moves straight to the next review step. If something is off, flag the issue on the same page and the mail program team will follow up.` +
+    `The link below opens your private review page. If everything looks right, approve it there: your sign-off is recorded and the piece moves straight to the next review step. If something is off, flag the issue on the same page and the mail program team will follow up.` +
     (reviewLink ? `\n\nReview & approve the mail piece: ${reviewLink}` : "") +
     footerText(reviewLink, "Your private review page");
   return {
@@ -315,12 +315,12 @@ export function reviewerNotice(
   const bodyHtml =
     `<p style="${styles.p}">The KDP Mail Program has a piece awaiting <strong>${esc(stageLabel.toLowerCase())}</strong>:</p>` +
     `<p style="${styles.p}"><strong>${esc(p.candidateSupported)}</strong><br/>${esc(p.officeLabel)}<br/>Scheduled mail date: ${esc(p.mailDateFormatted)}</p>` +
-    `<p style="${styles.p}">Please take a look and record your feedback — thumbs up or any issues you spot — on the review page below. Feedback recorded there is logged for the team automatically; replying to this email works too.</p>` +
+    `<p style="${styles.p}">Please take a look and record your feedback. Approval or any issues you spot can be marked on the review page below. Feedback recorded there is logged for the team automatically; replying to this email works too.</p>` +
     reviewButton;
   const text =
     `The KDP Mail Program has a piece awaiting ${stageLabel.toLowerCase()}:\n\n` +
     `${p.candidateSupported}\n${p.officeLabel}\nScheduled mail date: ${p.mailDateFormatted}\n\n` +
-    `Please take a look and record your feedback — thumbs up or any issues you spot — on the review page below. Feedback recorded there is logged for the team automatically; replying to this email works too.` +
+    `Please take a look and record your feedback. Approval or any issues you spot can be marked on the review page below. Feedback recorded there is logged for the team automatically; replying to this email works too.` +
     (reviewLink ? `\n\nReview & give feedback: ${reviewLink}` : "") +
     footerText(reviewLink, "Your private review page");
   return {

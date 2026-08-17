@@ -8,6 +8,7 @@
  */
 import { headers } from "next/headers";
 import { ArtworkImage } from "@/components/lightbox";
+import { Timeline } from "@/components/timeline";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { rateLimit } from "@/lib/rate-limit";
 import { presignGet } from "@/lib/r2";
@@ -79,15 +80,17 @@ export default async function ReviewInvitePage({
         <p className="mt-2 text-gray-600">
           The review link you used doesn&apos;t match any open review. If the
           mail program team re-sent the request, only the newest emailed link
-          works — check your inbox for the most recent message, or reply to it
+          works. Check your inbox for the most recent message, or reply to it
           if you can&apos;t find the link.
         </p>
       </Shell>
     );
   }
 
-  const { invite, project, open, currentVersion, response } = view;
+  const { invite, project, open, currentVersion, response, deniedStage } = view;
   const status = project.status as ProjectStatus;
+  /** Closed because the link was superseded, not because the stage moved. */
+  const linkReplaced = invite.revokedAt !== null && status === invite.stage;
   const isCampaignSignoff =
     invite.role === "campaign_contact" && invite.stage === "campaign_review";
 
@@ -137,16 +140,32 @@ export default async function ReviewInvitePage({
         </p>
       )}
 
+      {/* Where the piece stands right now, whether or not this link is
+          still usable. */}
+      <section className="mt-8">
+        <h2 className="mb-4 text-lg font-semibold text-gray-900">
+          Where this piece stands
+        </h2>
+        <Timeline
+          status={status}
+          changesRequestedFrom={
+            project.changesRequestedFrom as ProjectStatus | null
+          }
+          deniedStage={deniedStage}
+        />
+      </section>
+
       {!open ? (
-        <section className="mt-8 rounded-lg border border-gray-300 bg-gray-50 p-5">
+        <section className="mt-4 rounded-lg border border-gray-300 bg-gray-50 p-5">
           <h2 className="text-lg font-semibold text-gray-900">
-            This review window has closed
+            {linkReplaced
+              ? "This link was replaced"
+              : "This review window has closed"}
           </h2>
           <p className="mt-1 text-sm text-gray-600">
-            The project has moved on since this link was sent (it&apos;s now at{" "}
-            {STATUS_LABELS[status].toLowerCase()}), so feedback can no longer be
-            recorded here. If you still need to reach the mail program team,
-            reply to the email that brought you here.
+            {linkReplaced
+              ? "The mail program team sent you a newer review link for this piece. Check your inbox for the most recent email and use the link there."
+              : `The project has moved on since this link was sent (its current status is shown above), so feedback can no longer be recorded here. If you still need to reach the mail program team, reply to the email that brought you here.`}
           </p>
           {response && (
             <div className="mt-4 rounded-md border border-gray-200 bg-white p-4 text-sm">
@@ -231,7 +250,7 @@ export default async function ReviewInvitePage({
 
       <footer className="mt-10 border-t border-gray-200 pt-4 text-sm text-gray-500">
         This private link was sent to you by the KDP Mail Program. Please
-        don&apos;t forward it — feedback recorded here is logged under your
+        don&apos;t forward it; feedback recorded here is logged under your
         name.
       </footer>
     </Shell>

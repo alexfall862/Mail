@@ -17,10 +17,15 @@ import {
   projects,
   reviewInvites,
   reviewResponses,
+  stageReviews,
   submissionVersions,
 } from "@/db/schema";
 import { logEvent } from "./events";
-import { transition, type ProjectStatus } from "./state-machine";
+import {
+  transition,
+  type ProjectStatus,
+  type ReviewStage,
+} from "./state-machine";
 import { generateVendorToken, hashVendorToken } from "./tokens";
 
 export type InviteRole = "outside_reviewer" | "campaign_contact";
@@ -105,6 +110,9 @@ export type ReviewInviteView = {
     | null;
   /** This invite's response for the current version, if any. */
   response: typeof reviewResponses.$inferSelect | null;
+  /** Stage that denied the current version (while status = denied), for the
+   * progress timeline. */
+  deniedStage: ReviewStage | null;
 };
 
 /** Load everything the /r/{token} page needs. Null = unknown token. */
@@ -126,7 +134,20 @@ export async function getReviewInviteView(
 
   let currentVersion: ReviewInviteView["currentVersion"] = null;
   let response: ReviewInviteView["response"] = null;
+  let deniedStage: ReviewStage | null = null;
   if (project.currentVersionId) {
+    if (project.status === "denied") {
+      const [denial] = await db
+        .select({ stage: stageReviews.stage })
+        .from(stageReviews)
+        .where(
+          and(
+            eq(stageReviews.versionId, project.currentVersionId),
+            eq(stageReviews.decision, "denied"),
+          ),
+        );
+      deniedStage = (denial?.stage as ReviewStage | undefined) ?? null;
+    }
     const [version] = await db
       .select()
       .from(submissionVersions)
@@ -156,6 +177,7 @@ export async function getReviewInviteView(
     open: invite.revokedAt === null && project.status === invite.stage,
     currentVersion,
     response,
+    deniedStage,
   };
 }
 
@@ -204,10 +226,16 @@ export async function submitReviewResponse(input: {
       .where(eq(reviewInvites.id, found.id));
     if (!project || !invite) return fail(404, "This review link isn't valid.");
 
-    if (invite.revokedAt !== null || project.status !== invite.stage) {
+    if (invite.revokedAt !== null) {
       return fail(
         409,
-        "This review window has closed — the project has moved on since this link was sent.",
+        "This link was replaced by a newer one. Check your email for the most recent review link.",
+      );
+    }
+    if (project.status !== invite.stage) {
+      return fail(
+        409,
+        "This review window has closed. The project has moved on since this link was sent.",
       );
     }
     if (!project.currentVersionId) {
