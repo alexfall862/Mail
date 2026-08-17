@@ -54,7 +54,7 @@ export type ReviewerContactWithStages = ReviewerContact & {
 /**
  * Every configured reviewer across all stages, deduplicated by email, with
  * the stages each is configured for. The notice tool offers all of them at
- * any stage (current-stage contacts are just the pre-checked defaults).
+ * any stage, nobody pre-checked (the stages render as badges).
  */
 export function allReviewerContacts(
   table: Partial<Record<ReviewStage, ReviewerContact[]>> = STAGE_REVIEWER_CONTACTS,

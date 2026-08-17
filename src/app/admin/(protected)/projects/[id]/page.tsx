@@ -559,11 +559,11 @@ function latestAiReview(
   return null;
 }
 
-/** All configured reviewers plus this ticket's campaign contact, deduped;
- * the current stage's reviewers are the pre-checked defaults. At campaign
- * review the campaign contact is deliberately absent: the dedicated
- * sign-off request is the only way to email them there, so they can't be
- * emailed twice. */
+/** All configured reviewers plus this ticket's campaign contact, deduped.
+ * Nobody is pre-checked (blank slate per page); the stage badges show who
+ * usually reviews where. At campaign review the campaign contact is
+ * deliberately absent: the dedicated sign-off request is the only way to
+ * email them there, so they can't be emailed twice. */
 function buildNoticeContacts(
   status: ProjectStatus,
   campaignContactName: string,
@@ -574,7 +574,6 @@ function buildNoticeContacts(
     email: c.email,
     note: c.note,
     tags: c.stages.map((s) => STATUS_LABELS[s]),
-    defaultChecked: (c.stages as string[]).includes(status),
   }));
   if (
     campaignContactEmail &&
@@ -588,7 +587,6 @@ function buildNoticeContacts(
       email: campaignContactEmail,
       note: "Campaign contact",
       tags: [],
-      defaultChecked: false,
     });
   }
   return options;

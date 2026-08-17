@@ -27,7 +27,7 @@ import { isReviewStage, STATUS_LABELS } from "@/lib/state-machine";
 const bodySchema = z.object({
   /** Reviewer/campaign-contact emails; empty = admin team only. */
   recipients: z.array(z.email()).max(20).default([]),
-  emailOptions: emailOptionsSchema.default({ ccAdmins: true, extraCc: [] }),
+  emailOptions: emailOptionsSchema.default({ ccAdmins: false, extraCc: [] }),
 });
 
 export async function POST(
