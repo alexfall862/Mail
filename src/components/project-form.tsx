@@ -86,6 +86,7 @@ export function ProjectForm(props: ProjectFormProps) {
   const [fields, setFields] = useState(() => ({
     candidateSupported: initial?.project.candidateSupported ?? "",
     description: initial?.project.description ?? "",
+    citationsAndClaims: initial?.project.citationsAndClaims ?? "",
     office: (initial?.project.office ?? "") as Office | "",
     districtDetail: initial?.project.districtDetail ?? "",
     pieceCount: initial ? String(initial.project.pieceCount) : "",
@@ -170,6 +171,7 @@ export function ProjectForm(props: ProjectFormProps) {
     const candidate: ResubmitProjectFields = {
       candidateSupported: fields.candidateSupported,
       description: fields.description,
+      citationsAndClaims: fields.citationsAndClaims || undefined,
       office: (fields.office || "other") as Office,
       districtDetail: fields.districtDetail || undefined,
       pieceCount: Number.isFinite(pieceCount) ? pieceCount : 0,
@@ -429,6 +431,22 @@ export function ProjectForm(props: ProjectFormProps) {
             className={inputCls}
             value={fields.description}
             onChange={(e) => setField("description", e.target.value)}
+          />
+        </div>
+        <div>
+          <label htmlFor="citationsAndClaims" className={labelCls}>
+            Citations and claims
+          </label>
+          <p className="text-xs text-gray-500">
+            Optional. Links, sources, or explanations that support any claims
+            made in the piece.
+          </p>
+          <textarea
+            id="citationsAndClaims"
+            rows={3}
+            className={inputCls}
+            value={fields.citationsAndClaims}
+            onChange={(e) => setField("citationsAndClaims", e.target.value)}
           />
         </div>
         <div className="grid gap-4 sm:grid-cols-2">

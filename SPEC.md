@@ -98,6 +98,7 @@ create table projects (
   id                   uuid primary key default gen_random_uuid(),
   candidate_supported  text not null,
   description          text not null,
+  citations_and_claims text,          -- optional: links/notes supporting claims in the piece
   office               office_type not null,
   district_detail      text,          -- free text: district/county; REQUIRED in app when office='other'
   piece_count          integer not null check (piece_count > 0),
@@ -406,7 +407,8 @@ Keys live in one config file so KDP can adjust between cycles without a migratio
 
 ## 9. Submission form fields
 
-General: candidate_supported (text, req), description (textarea, req), office (select of
+General: candidate_supported (text, req), description (textarea, req), citations_and_claims
+(textarea, optional; links/notes supporting claims in the piece), office (select of
 enum incl. "Other", req), district_detail (text; label "District / County / Specify office",
 required when office = state_senate, state_house, county_party, municipal_county_office,
 or other), piece_count (int > 0, req), total_cost (dollars input, stored as cents, req),
@@ -439,7 +441,7 @@ No emails on delete.
 
 `GET /admin/export?status=&year=` → CSV, one row per project (including tombstones as
 rows flagged `deleted=true` with their preserved columns): id, candidate, office,
-district_detail, description, pieces, total_cost (dollars), mail_date, status,
+district_detail, description, citations_and_claims, pieces, total_cost (dollars), mail_date, status,
 status_changed_at, created_at, permit_number, post_office_location, then per role
 (designer/print/mail): org, contact, email, paid_by_kdp, paid_at — plus `fully_paid`.
 Excel-safe encoding (UTF-8 BOM), proper quoting.

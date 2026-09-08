@@ -1,0 +1,1 @@
+ALTER TABLE "projects" ADD COLUMN "citations_and_claims" text;

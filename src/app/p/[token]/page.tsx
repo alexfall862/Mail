@@ -149,6 +149,7 @@ export default async function VendorStatusPage({
               project: {
                 candidateSupported: project.candidateSupported,
                 description: project.description,
+                citationsAndClaims: project.citationsAndClaims ?? undefined,
                 office: project.office as Office,
                 districtDetail: project.districtDetail ?? undefined,
                 pieceCount: project.pieceCount,

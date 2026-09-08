@@ -191,6 +191,9 @@ export async function runAiReview(
       `Office: ${officeLabel(project.office as Office)}` +
       (project.districtDetail ? ` (${project.districtDetail})` : "") +
       `\nScheduled mail date: ${formatDate(project.mailDate)}\n` +
+      (project.citationsAndClaims
+        ? `Citations and claims provided by the submitter (verify the piece against these):\n${project.citationsAndClaims}\n`
+        : "") +
       `Artwork images follow (${artwork.map((f) => f.kind).join(", ")}).`;
 
     const response = await fetch("https://api.openai.com/v1/chat/completions", {

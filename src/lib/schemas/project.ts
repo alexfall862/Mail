@@ -92,6 +92,7 @@ const baseProjectFields = z.object({
       .min(1, "Candidate or cause supported is required.")
       .max(200),
     description: z.string().trim().min(1, "Description is required.").max(5000),
+    citationsAndClaims: z.string().trim().max(10000).optional(),
     office: z.enum(OFFICE_VALUES),
     districtDetail: z.string().trim().max(300).optional(),
     pieceCount: z

@@ -61,6 +61,7 @@ function projectValues(fields: ProjectFields) {
   return {
     candidateSupported: fields.candidateSupported,
     description: fields.description,
+    citationsAndClaims: fields.citationsAndClaims?.trim() ? fields.citationsAndClaims.trim() : null,
     office: fields.office,
     districtDetail: fields.districtDetail?.trim() ? fields.districtDetail.trim() : null,
     pieceCount: fields.pieceCount,
@@ -434,6 +435,7 @@ function hasFieldChanges(
   current: {
     candidateSupported: string;
     description: string;
+    citationsAndClaims: string | null;
     office: string;
     districtDetail: string | null;
     pieceCount: number;
@@ -445,9 +447,11 @@ function hasFieldChanges(
   next: ProjectFields,
 ): boolean {
   const nextDistrict = next.districtDetail?.trim() ? next.districtDetail.trim() : null;
+  const nextCitations = next.citationsAndClaims?.trim() ? next.citationsAndClaims.trim() : null;
   return (
     current.candidateSupported !== next.candidateSupported ||
     current.description !== next.description ||
+    current.citationsAndClaims !== nextCitations ||
     current.office !== next.office ||
     current.districtDetail !== nextDistrict ||
     current.pieceCount !== next.pieceCount ||
