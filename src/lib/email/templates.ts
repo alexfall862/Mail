@@ -40,19 +40,26 @@ function esc(value: string): string {
 function wrap(opts: {
   heading: string;
   bodyHtml: string;
-  /** Vendor emails: the magic link for the standard footer. */
+  /** Vendor/reviewer emails: the recipient's private link for the footer. */
   magicLink?: string | null;
+  /** Footer label for that link (default: vendor status wording). */
+  linkLabel?: string;
 }): { html: string } {
+  const label = opts.linkLabel ?? "Check status anytime";
   const footer = opts.magicLink
-    ? `<p style="${styles.footer}">Check status anytime: <a href="${esc(opts.magicLink)}">${esc(opts.magicLink)}</a></p>`
+    ? `<p style="${styles.footer}">${esc(label)}: <a href="${esc(opts.magicLink)}">${esc(opts.magicLink)}</a></p>`
     : `<p style="${styles.footer}">KDP Mail Program internal notification.</p>`;
   return {
     html: `<!doctype html><html><body style="${styles.body}"><div style="${styles.card}"><h1 style="${styles.h1}">${esc(opts.heading)}</h1>${opts.bodyHtml}${footer}</div></body></html>`,
   };
 }
 
+function footerText(link: string | null, label: string): string {
+  return link ? `\n\n--\n${label}: ${link}` : "";
+}
+
 function vendorFooterText(magicLink: string | null): string {
-  return magicLink ? `\n\n--\nCheck status anytime: ${magicLink}` : "";
+  return footerText(magicLink, "Check status anytime");
 }
 
 function pieceLine(p: ProjectSummary): string {
@@ -259,29 +266,36 @@ export function vendorLinkRegenerated(
 export function campaignReviewRequest(
   p: ProjectSummary,
   primaryOrgs: string[],
-  magicLink: string | null,
+  reviewLink: string | null,
 ): EmailContent {
   const partners =
     primaryOrgs.length > 0 ? primaryOrgs.join(" and ") : "our mail vendors";
   const subject = subj(
     `Please review: mail piece supporting ${p.candidateSupported}`,
   );
-  const reviewButton = magicLink
-    ? `<p style="${styles.p}"><a href="${esc(magicLink)}" style="${styles.button}">Review the mail piece</a></p>`
+  const reviewButton = reviewLink
+    ? `<p style="${styles.p}"><a href="${esc(reviewLink)}" style="${styles.button}">Review &amp; approve the mail piece</a></p>`
     : "";
   const bodyHtml =
     `<p style="${styles.p}">Congratulations. The Kansas Democratic Party has decided to invest in your race and will be printing and mailing a mail piece in support of your campaign.</p>` +
     `<p style="${styles.p}">We would like you to review it for any content that is not accurate, and to otherwise be aware that this mailer is currently scheduled to be sent on <strong>${esc(p.mailDateFormatted)}</strong>, working with ${esc(partners)}.</p>` +
+    `<p style="${styles.p}">The button below opens your private review page. If everything looks right, approve it there: your sign-off is recorded and the piece moves straight to the next review step. If something is off, flag the issue on the same page and the mail program team will follow up.</p>` +
     reviewButton;
   const text =
     `Congratulations. The Kansas Democratic Party has decided to invest in your race and will be printing and mailing a mail piece in support of your campaign.\n\n` +
-    `We would like you to review it for any content that is not accurate, and to otherwise be aware that this mailer is currently scheduled to be sent on ${p.mailDateFormatted}, working with ${partners}.` +
-    (magicLink ? `\n\nReview the mail piece: ${magicLink}` : "") +
-    vendorFooterText(magicLink);
+    `We would like you to review it for any content that is not accurate, and to otherwise be aware that this mailer is currently scheduled to be sent on ${p.mailDateFormatted}, working with ${partners}.\n\n` +
+    `The link below opens your private review page. If everything looks right, approve it there: your sign-off is recorded and the piece moves straight to the next review step. If something is off, flag the issue on the same page and the mail program team will follow up.` +
+    (reviewLink ? `\n\nReview & approve the mail piece: ${reviewLink}` : "") +
+    footerText(reviewLink, "Your private review page");
   return {
     template: "campaign_review_request",
     subject,
-    ...wrap({ heading: "Please review this mail piece", bodyHtml, magicLink }),
+    ...wrap({
+      heading: "Please review this mail piece",
+      bodyHtml,
+      magicLink: reviewLink,
+      linkLabel: "Your private review page",
+    }),
     text,
   };
 }
@@ -290,29 +304,59 @@ export function campaignReviewRequest(
 export function reviewerNotice(
   p: ProjectSummary,
   stageLabel: string,
-  magicLink: string | null,
+  reviewLink: string | null,
 ): EmailContent {
   const subject = subj(
     `${stageLabel} needed: mail piece supporting ${p.candidateSupported}`,
   );
-  const reviewButton = magicLink
-    ? `<p style="${styles.p}"><a href="${esc(magicLink)}" style="${styles.button}">View the mail piece</a></p>`
+  const reviewButton = reviewLink
+    ? `<p style="${styles.p}"><a href="${esc(reviewLink)}" style="${styles.button}">Review &amp; give feedback</a></p>`
     : "";
   const bodyHtml =
     `<p style="${styles.p}">The KDP Mail Program has a piece awaiting <strong>${esc(stageLabel.toLowerCase())}</strong>:</p>` +
     `<p style="${styles.p}"><strong>${esc(p.candidateSupported)}</strong><br/>${esc(p.officeLabel)}<br/>Scheduled mail date: ${esc(p.mailDateFormatted)}</p>` +
-    `<p style="${styles.p}">Please take a look and report any issues to the mail program team by replying to this email.</p>` +
+    `<p style="${styles.p}">Please take a look and record your feedback. Approval or any issues you spot can be marked on the review page below. Feedback recorded there is logged for the team automatically; replying to this email works too.</p>` +
     reviewButton;
   const text =
     `The KDP Mail Program has a piece awaiting ${stageLabel.toLowerCase()}:\n\n` +
     `${p.candidateSupported}\n${p.officeLabel}\nScheduled mail date: ${p.mailDateFormatted}\n\n` +
-    `Please take a look and report any issues to the mail program team by replying to this email.` +
-    (magicLink ? `\n\nView the mail piece: ${magicLink}` : "") +
-    vendorFooterText(magicLink);
+    `Please take a look and record your feedback. Approval or any issues you spot can be marked on the review page below. Feedback recorded there is logged for the team automatically; replying to this email works too.` +
+    (reviewLink ? `\n\nReview & give feedback: ${reviewLink}` : "") +
+    footerText(reviewLink, "Your private review page");
   return {
     template: "reviewer_notice",
     subject,
-    ...wrap({ heading: `${stageLabel} needed`, bodyHtml, magicLink }),
+    ...wrap({
+      heading: `${stageLabel} needed`,
+      bodyHtml,
+      magicLink: reviewLink,
+      linkLabel: "Your private review page",
+    }),
+    text,
+  };
+}
+
+/* ------------------- campaign sign-off landed (internal, admin-only) */
+export function adminCampaignApproved(
+  p: ProjectSummary,
+  contactName: string,
+  contactEmail: string,
+  adminUrl: string,
+): EmailContent {
+  const who = contactName ? `${contactName} (${contactEmail})` : contactEmail;
+  const subject = subj(`Campaign signed off: ${p.candidateSupported}`);
+  const bodyHtml =
+    `<p style="${styles.p}"><strong>${esc(who)}</strong> approved <strong>${esc(pieceLine(p))}</strong> on their review page.</p>` +
+    `<p style="${styles.p}">The project has moved from campaign review to legal review. The vendor was not emailed for this step.</p>` +
+    `<p style="${styles.p}"><a href="${esc(adminUrl)}" style="${styles.button}">Open the project</a></p>`;
+  const text =
+    `${who} approved ${pieceLine(p)} on their review page.\n\n` +
+    `The project has moved from campaign review to legal review. The vendor was not emailed for this step.\n\n` +
+    `Open it: ${adminUrl}`;
+  return {
+    template: "admin_campaign_approved",
+    subject,
+    ...wrap({ heading: "Campaign signed off", bodyHtml }),
     text,
   };
 }

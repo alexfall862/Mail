@@ -82,6 +82,10 @@ export type TransitionInput =
   | { kind: "review_decision"; stage: ReviewStage; decision: ReviewDecision }
   /** Row 7 — vendor resubmits via magic link; routing rule applies. */
   | { kind: "vendor_resubmit"; artworkChanged: boolean }
+  /** Campaign contact approves via their review link (post-spec amendment,
+   * 2026-08-17): advances campaign_review → legal_review with no admin
+   * decision. Actor: reviewer. */
+  | { kind: "campaign_signoff" }
   /** Admin override: resume review at the kicking stage without a
    * resubmission (e.g. the "requested change" was a misunderstanding).
    * No emails; same version. */
@@ -153,6 +157,18 @@ export function transition(
       }
       // Exhaustive over ReviewDecision; unreachable.
       return err("invalid_transition", "Unknown review decision.");
+    }
+
+    case "campaign_signoff": {
+      // Only valid while the project sits in campaign review; a stale link
+      // (project already moved) loses cleanly, like a concurrent click.
+      if (current.status !== "campaign_review") {
+        return alreadyMoved(current.status);
+      }
+      return ok({
+        status: ADVANCE_TARGET.campaign_review,
+        changesRequestedFrom: null,
+      });
     }
 
     case "vendor_resubmit": {

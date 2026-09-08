@@ -2,10 +2,11 @@
 import { z } from "zod";
 import { REVIEW_DECISIONS, REVIEW_STAGES } from "@/lib/state-machine";
 
-/** Recipient options for admin-triggered outgoing emails. */
+/** Recipient options for admin-triggered outgoing emails. Blank slate by
+ * default: nothing is CC'd unless the sender opts in per send. */
 export const emailOptionsSchema = z.object({
-  /** CC the admin team (all active admin accounts). Defaults on. */
-  ccAdmins: z.boolean().default(true),
+  /** CC the admin team (all active admin accounts). Defaults off. */
+  ccAdmins: z.boolean().default(false),
   /** Additional parties to include (CC). */
   extraCc: z.array(z.email("Invalid additional email.")).max(10).default([]),
 });
@@ -20,7 +21,7 @@ export const reviewDecisionSchema = z
     /** Off = suppress the vendor email for this decision (late-revision
      * churn); the status page still updates and the suppression is audited. */
     notifyVendor: z.boolean().default(true),
-    emailOptions: emailOptionsSchema.default({ ccAdmins: true, extraCc: [] }),
+    emailOptions: emailOptionsSchema.default({ ccAdmins: false, extraCc: [] }),
   })
   .superRefine((data, ctx) => {
     // Vendors receive these notes verbatim (§12) — require them when the

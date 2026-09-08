@@ -51,8 +51,9 @@ function parseExtraCc(raw: string): string[] {
     .filter((e) => e !== "");
 }
 
-/** Recipient controls shared by admin-triggered outgoing emails, collapsed
- * behind a labeled disclosure so each action's primary controls stand out. */
+/** Recipient controls shared by admin-triggered outgoing emails. Open by
+ * default with nothing CC'd — every send starts from a blank slate and the
+ * sender consciously adds recipients. */
 function EmailOptionsFields({
   label,
   ccAdmins,
@@ -67,7 +68,7 @@ function EmailOptionsFields({
   onExtraCc: (v: string) => void;
 }) {
   return (
-    <details className="rounded-md border border-gray-200 bg-white/60">
+    <details open className="rounded-md border border-gray-200 bg-white/60">
       <summary className="cursor-pointer select-none px-3 py-2 text-xs font-medium text-gray-600">
         {label}
         {ccAdmins ? " · CCing the admin team" : ""}
@@ -114,7 +115,7 @@ export function ReviewPanel({
   );
   const [notes, setNotes] = useState("");
   const [notifyVendor, setNotifyVendor] = useState(true);
-  const [ccAdmins, setCcAdmins] = useState(true);
+  const [ccAdmins, setCcAdmins] = useState(false);
   const [extraCc, setExtraCc] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -553,15 +554,13 @@ export type ReviewerContactOption = {
   note?: string;
   /** Stage labels this contact usually reviews at (badges in the list). */
   tags: string[];
-  /** Pre-checked when they review the project's current stage. */
-  defaultChecked: boolean;
 };
 
 /**
  * Manual review notice. Offers every configured reviewer (all rosters) plus
- * the ticket's campaign contact; the current stage's reviewers start
- * checked. With nobody selected the notice goes to the admin team only
- * (quick internal heads-up or testing).
+ * the ticket's campaign contact. Everyone starts unchecked — a blank slate;
+ * the stage badges show who usually reviews here. With nobody selected the
+ * notice goes to the admin team only (quick internal heads-up or testing).
  */
 export function ReviewerNoticeButtons({
   projectId,
@@ -572,9 +571,9 @@ export function ReviewerNoticeButtons({
 }) {
   const router = useRouter();
   const [selected, setSelected] = useState<Record<string, boolean>>(() =>
-    Object.fromEntries(contacts.map((c) => [c.email, c.defaultChecked])),
+    Object.fromEntries(contacts.map((c) => [c.email, false])),
   );
-  const [ccAdmins, setCcAdmins] = useState(true);
+  const [ccAdmins, setCcAdmins] = useState(false);
   const [extraCc, setExtraCc] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -587,8 +586,9 @@ export function ReviewerNoticeButtons({
       <div>
         <p className="text-sm font-medium text-gray-900">Send a review notice</p>
         <p className="mt-0.5 text-xs text-gray-600">
-          Reviewers for the current stage start checked. With nobody checked,
-          the notice goes to the admin team only.
+          Nobody starts checked — pick exactly who to notify (badges show who
+          usually reviews each stage). With nobody checked, the notice goes to
+          the admin team only.
         </p>
         {contacts.length > 0 && (
           <ul className="mt-2 space-y-1">
@@ -634,7 +634,7 @@ export function ReviewerNoticeButtons({
           onClick={async () => {
             const summary = adminOnly
               ? "No reviewers are selected. Send the notice to the admin team only?"
-              : `Email ${chosen.map((c) => c.name).join(", ")} asking them to review this piece? The email includes the status link and the scheduled mail date.`;
+              : `Email ${chosen.map((c) => c.name).join(", ")} asking them to review this piece? Each gets their own private review link (one email per person) where their feedback is logged.`;
             if (!window.confirm(summary)) return;
             setBusy(true);
             setMessage(null);
@@ -680,7 +680,7 @@ export function CampaignReviewEmailButton({
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
-  const [ccAdmins, setCcAdmins] = useState(true);
+  const [ccAdmins, setCcAdmins] = useState(false);
   const [extraCc, setExtraCc] = useState("");
   const [message, setMessage] = useState<string | null>(null);
 
@@ -700,7 +700,7 @@ export function CampaignReviewEmailButton({
           onClick={async () => {
             if (
               !window.confirm(
-                `Email ${contactName} (${contactEmail}) asking the campaign to review this piece? The email includes the status link and the scheduled mail date.`,
+                `Email ${contactName} (${contactEmail}) asking the campaign to review this piece? Their private review link lets them approve it directly — approval moves the project to legal review on its own.`,
               )
             )
               return;

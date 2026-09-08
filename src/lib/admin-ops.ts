@@ -489,6 +489,7 @@ export type DashboardRow = {
   candidateSupported: string;
   office: string;
   status: ProjectStatus;
+  changesRequestedFrom: ProjectStatus | null;
   mailDate: string;
   pieceCount: number;
   totalCostCents: number;
@@ -519,6 +520,7 @@ export async function getDashboardRows(
     candidateSupported: p.candidateSupported,
     office: p.office,
     status: p.status,
+    changesRequestedFrom: p.changesRequestedFrom,
     mailDate: p.mailDate,
     pieceCount: p.pieceCount,
     totalCostCents: p.totalCostCents,

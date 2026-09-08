@@ -1,6 +1,6 @@
 {
-  "id": "5b0af028-2e08-4a8f-850e-202f824ee74b",
-  "prevId": "4cfe5c97-0f88-47d3-9a50-2a37b3d42a82",
+  "id": "bb742987-c1af-45d0-b34e-492bc63aa763",
+  "prevId": "5b0af028-2e08-4a8f-850e-202f824ee74b",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -536,6 +536,12 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true
+        },
+        "citations_and_claims": {
+          "name": "citations_and_claims",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         },
         "office": {
           "name": "office",
