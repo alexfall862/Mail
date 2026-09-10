@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { districtOptionsFor, KANSAS_COUNTIES } from "@/lib/district-options";
-import { minMailDate } from "@/lib/schemas/project";
+import { minMailDate, resubmitMailDateFloor } from "@/lib/schemas/project";
 
 describe("mail date: two full business days ahead", () => {
   // August 2026: the 10th is a Monday, the 14th a Friday.
@@ -20,6 +20,39 @@ describe("mail date: two full business days ahead", () => {
   it("crosses month boundaries", () => {
     // 2026-08-31 is a Monday.
     expect(minMailDate("2026-08-31")).toBe("2026-09-02");
+  });
+});
+
+describe("resubmission mail date floor", () => {
+  // 2026-08-10 is a Monday, so the standard floor from the 12th is the 14th.
+  it("keeps the original date when it's now inside the lead time", () => {
+    // Submitted the 10th for the 13th; edits come back on the 12th.
+    const floor = resubmitMailDateFloor("2026-08-13", "2026-08-12");
+    expect(floor.min).toBe("2026-08-13");
+    expect(floor.grandfathered).toBe(true);
+  });
+
+  it("still refuses a date earlier than the original", () => {
+    const floor = resubmitMailDateFloor("2026-08-13", "2026-08-12");
+    expect("2026-08-12" < floor.min).toBe(true);
+  });
+
+  it("applies the standard lead time when the original is comfortably ahead", () => {
+    const floor = resubmitMailDateFloor("2026-08-31", "2026-08-12");
+    expect(floor.min).toBe(minMailDate("2026-08-12"));
+    expect(floor.grandfathered).toBe(false);
+  });
+
+  it("applies the standard lead time once the original date has passed", () => {
+    const floor = resubmitMailDateFloor("2026-08-10", "2026-08-12");
+    expect(floor.min).toBe(minMailDate("2026-08-12"));
+    expect(floor.grandfathered).toBe(false);
+  });
+
+  it("allows a same-day original date that was locked in earlier", () => {
+    const floor = resubmitMailDateFloor("2026-08-12", "2026-08-12");
+    expect(floor.min).toBe("2026-08-12");
+    expect(floor.grandfathered).toBe(true);
   });
 });
 

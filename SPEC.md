@@ -412,8 +412,10 @@ General: candidate_supported (text, req), description (textarea, req), citations
 enum incl. "Other", req), district_detail (text; label "District / County / Specify office",
 required when office = state_senate, state_house, county_party, municipal_county_office,
 or other), piece_count (int > 0, req), total_cost (dollars input, stored as cents, req),
-post_office_location (text, req), permit_number (text, req), mail_date (date, must be
-today or later, req).
+post_office_location (text, req), permit_number (text, req), mail_date (date, req; at
+least two full business days out on a new submission. On resubmission the project's
+existing mail date is grandfathered in, so requested edits never force the mailing to
+slip; earlier-than-original and already-past dates still fail).
 
 Vendors: three optional blocks (Designer/Consultant, Print Shop, Mail House), each with
 org_name, contact_name, email, phone (opt), paid_by_kdp (checkbox, the "needs to be paid

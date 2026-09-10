@@ -48,7 +48,7 @@ contradiction resolved by the implementer — flagged for explicit review.
 
 ## Phase 5 — Vendor surface
 
-- "Today" for the mail-date rule is computed in America/Chicago; the rule also applies on resubmission (a stale past mail date must be updated to resubmit).
+- "Today" for the mail-date rule is computed in America/Chicago. On resubmission the floor is the *lesser* of the two-business-day rule and the date the original submission already locked in (`resubmitMailDateFloor`): a revision round-trip must never force the mailing later than the date we accepted on day one — submit 2/1 for 2/5, resubmit 2/4, and 2/5 still stands. Moving the date earlier than the original is still refused, and a stale past mail date must still be updated to resubmit. The wire schema can't check this (the payload isn't trusted for the current date), so `resubmitProject` enforces it against the locked project row; the form uses the same helper for the picker's `min` and its pre-flight check.
 - Contacts are editable on resubmission (per §5's "contacts" in the routing rule); admin payment data (`paid_at`, `paid_marked_by`) is preserved for roles that remain, removed roles are deleted, new roles added.
 - `version.submitted` is logged for v1 as well as resubmissions; the v1 flow also logs `project.created`, per-file `file.uploaded`, and the automatic `status.changed`.
 - The submission response body contains no magic link (it's emailed only); `/submit/success` says so. `/p/{token}` pages send `robots: noindex`.

@@ -21,6 +21,7 @@ import {
 import { encryptVendorToken } from "./token-crypto";
 import { generateVendorToken, hashVendorToken } from "./tokens";
 import { verifyClaimedFile, type UploadKind } from "./uploads";
+import { resubmitMailDateFloor } from "./schemas/project";
 import type {
   ContactInput,
   FileClaim,
@@ -234,6 +235,14 @@ export async function resubmitProject(
           .from(projects)
           .where(eq(projects.id, projectId));
         if (!project) return fail(404, "This link is no longer valid.");
+
+        // Lead time is measured against the stored mail date, not today: a
+        // revision round-trip must not push the mailing past the date the
+        // original submission already locked in.
+        const mailDateFloor = resubmitMailDateFloor(project.mailDate);
+        if (input.project.mailDate < mailDateFloor.min) {
+          return fail(400, mailDateFloor.message);
+        }
 
         const currentVersionId = project.currentVersionId;
         if (!currentVersionId) return fail(500, "Project has no current version.");
