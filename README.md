@@ -70,6 +70,7 @@ Migrations live in `drizzle/` and are generated from `src/db/schema.ts`:
 npm run db:generate   # after editing src/db/schema.ts: emit a new migration
 npm run db:migrate    # apply pending migrations
 npm run db:seed       # idempotent superuser seed (skips if the email exists)
+npm run db:seed -- --force-password   # recovery: reset that superuser from .env
 npm run db:setup      # migrate + seed
 ```
 
@@ -85,16 +86,27 @@ only remedy for a forgotten password is a replacement.
   once, the account's sessions end immediately, and the admin is forced to pick
   a new password at next sign-in. The login page tells locked-out admins to ask;
   set `ADMIN_SUPPORT_EMAIL` to turn that into a mailto link.
-- **A locked-out superuser** has no one above them, so reset from the database
-  side instead — on Railway, run it in the service shell, or locally with
-  production's `DATABASE_URL`:
+- **A locked-out superuser** has no one above them, so recover from the database
+  side instead. Two equivalent routes — on Railway use `railway run`, or set
+  production's `DATABASE_URL` locally first:
 
   ```bash
+  # (a) reset to a password you already control, from SEED_SUPERUSER_PASSWORD
+  npm run db:seed -- --force-password
+
+  # (b) reset any admin to a fresh random temp password
   npm run admin:reset-password -- someone@kansasdems.org
   ```
 
-  It prints a temporary password and behaves exactly like the in-app reset.
-  Hand the password over out of band.
+  Use (a) when *you* are the locked-out superuser: set `SEED_SUPERUSER_PASSWORD`
+  to something you know, run it, sign in, change the password, then clear the
+  variable. Use (b) for anyone else; it prints the temp password to hand over
+  out of band.
+
+  Both end the account's sessions and force a password change at next sign-in,
+  so neither leaves a standing credential in the environment. `--force-password`
+  is opt-in by design: `railway:start` runs `db:setup` on every boot, and a seed
+  that reset by default would silently revert real password changes on deploy.
 - A signed-in admin changes their own password at **/admin/settings/password**;
   that signs out their other sessions.
 

@@ -12,15 +12,16 @@
  * It never reveals an existing password — argon2id hashes are one-way.
  */
 import "dotenv/config";
-import { hash } from "@node-rs/argon2";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
-import { admins, events, sessions } from "../src/db/schema";
+import * as schema from "../src/db/schema";
+const { admins } = schema;
 import {
   generateTempPassword,
   normalizeEmail,
 } from "../src/lib/admin-credentials";
+import { applyPasswordReset } from "../src/lib/admin-recovery";
 
 async function main() {
   const email = normalizeEmail(process.argv[2] ?? "");
@@ -32,7 +33,7 @@ async function main() {
   if (!process.env.DATABASE_URL) throw new Error("DATABASE_URL is not set");
 
   const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 1 });
-  const db = drizzle(pool);
+  const db = drizzle(pool, { schema });
   try {
     const [target] = await db
       .select({
@@ -52,17 +53,11 @@ async function main() {
 
     const tempPassword = generateTempPassword();
     await db.transaction(async (tx) => {
-      await tx
-        .update(admins)
-        .set({ passwordHash: await hash(tempPassword), mustChangePassword: true })
-        .where(eq(admins.id, target.id));
-      await tx.delete(sessions).where(eq(sessions.adminId, target.id));
-      await tx.insert(events).values({
-        projectId: null,
-        actor: "system",
-        actorId: target.id,
-        eventType: "admin.password_reset",
-        payload: { adminId: target.id, email: target.email, via: "cli" },
+      await applyPasswordReset(tx, {
+        adminId: target.id,
+        email: target.email,
+        password: tempPassword,
+        via: "cli",
       });
     });
 

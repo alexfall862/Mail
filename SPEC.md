@@ -374,9 +374,12 @@ and cleaned by the R2 lifecycle rule in the setup checklist).
 - No self-signup, no password reset emails (superuser resets manually). The login
   page says so, pointing at `ADMIN_SUPPORT_EMAIL` when it is set.
 - Break-glass: a locked-out superuser has no one above them to reset from the UI, so
-  `npm run admin:reset-password -- <email>` does the same reset from the database side
-  (temp password, forced change, sessions ended, `admin.password_reset` event with
-  actor `system`). Passwords are never recoverable — argon2id is one-way.
+  two CLIs do the same reset from the database side — `npm run admin:reset-password --
+  <email>` (fresh random temp password, any admin) and `npm run db:seed --
+  --force-password` (the seed superuser, from `SEED_SUPERUSER_PASSWORD`). Both end the
+  account's sessions, force a change at next sign-in, and log `admin.password_reset`
+  with actor `system`. `--force-password` is never automatic: `db:setup` runs on every
+  Railway boot. Passwords are never recoverable — argon2id is one-way.
 
 ## 8. Routes / pages
 
