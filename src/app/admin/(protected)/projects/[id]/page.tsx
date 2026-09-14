@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { getAdminProjectView } from "@/lib/admin-ops";
 import { getSessionAdmin } from "@/lib/auth";
-import { formatDate, formatDateTime, formatMoney } from "@/lib/format";
+import { formatDate, formatDateTime, formatMoney, projectRef } from "@/lib/format";
 import { presignGet } from "@/lib/r2";
 import {
   DISTRICT_DETAIL_LABEL,
@@ -135,6 +135,7 @@ export default async function AdminProjectPage({
 
       {/* Facts grid */}
       <section className="grid gap-x-8 gap-y-3 rounded-lg border border-gray-200 bg-white p-5 text-sm sm:grid-cols-2 lg:grid-cols-3">
+        <Fact label="Reference" value={`#${projectRef(project.id)}`} />
         <Fact label="Mail date" value={formatDate(project.mailDate)} />
         <Fact label="Pieces" value={project.pieceCount.toLocaleString()} />
         <Fact label="Total cost" value={formatMoney(project.totalCostCents)} />

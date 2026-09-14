@@ -27,3 +27,12 @@ export function formatDateTime(date: Date): string {
     timeZone: "America/Chicago",
   });
 }
+
+/**
+ * Short, stable handle for a project ("A1B2C3"), shown in email subjects and
+ * on every project page. Derived from the UUID rather than stored, so it needs
+ * no column and applies retroactively to projects created before it existed.
+ */
+export function projectRef(projectId: string): string {
+  return projectId.replaceAll("-", "").slice(0, 6).toUpperCase();
+}

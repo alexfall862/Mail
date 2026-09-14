@@ -2,7 +2,7 @@ import { headers } from "next/headers";
 import { ArtworkImage } from "@/components/lightbox";
 import { ProjectForm } from "@/components/project-form";
 import { Timeline } from "@/components/timeline";
-import { formatDate, formatDateTime } from "@/lib/format";
+import { formatDate, formatDateTime, projectRef } from "@/lib/format";
 import { getVendorProjectView } from "@/lib/projects";
 import { rateLimit } from "@/lib/rate-limit";
 import { presignGet } from "@/lib/r2";
@@ -109,6 +109,9 @@ export default async function VendorStatusPage({
           </p>
           <p className="mt-1 text-sm text-gray-600">
             Mail date: <strong>{formatDate(project.mailDate)}</strong>
+          </p>
+          <p className="mt-1 text-sm text-gray-500">
+            Project ref #{projectRef(project.id)}
           </p>
         </div>
         <span className="rounded-full bg-gray-100 px-3 py-1 text-sm font-medium text-gray-800">
