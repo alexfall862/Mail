@@ -75,6 +75,31 @@ npm run db:setup      # migrate + seed
 
 Never edit an applied migration; add a new one.
 
+## Admin passwords
+
+Passwords are argon2id hashes, so an existing one can never be read back — the
+only remedy for a forgotten password is a replacement.
+
+- **Any admin, day to day:** a superuser resets them from **/admin/users →
+  Reset password**. A 16-character temporary password is shown to the superuser
+  once, the account's sessions end immediately, and the admin is forced to pick
+  a new password at next sign-in. The login page tells locked-out admins to ask;
+  set `ADMIN_SUPPORT_EMAIL` to turn that into a mailto link.
+- **A locked-out superuser** has no one above them, so reset from the database
+  side instead — on Railway, run it in the service shell, or locally with
+  production's `DATABASE_URL`:
+
+  ```bash
+  npm run admin:reset-password -- someone@kansasdems.org
+  ```
+
+  It prints a temporary password and behaves exactly like the in-app reset.
+  Hand the password over out of band.
+- A signed-in admin changes their own password at **/admin/settings/password**;
+  that signs out their other sessions.
+
+Every reset writes an `admin.password_reset` row to `events`.
+
 ## Deploying to Railway
 
 Follow [SETUP_CHECKLIST.md](SETUP_CHECKLIST.md) for accounts/DNS. The app

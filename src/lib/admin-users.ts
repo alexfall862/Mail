@@ -1,11 +1,10 @@
 /** Superuser admin management (SPEC §7). */
-import { randomBytes } from "node:crypto";
 import { hash } from "@node-rs/argon2";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { admins, sessions } from "@/db/schema";
 import { logEvent } from "./events";
-import { normalizeEmail } from "./auth";
+import { generateTempPassword, normalizeEmail } from "./admin-credentials";
 
 export type UserOpResult<T> =
   | { ok: true; value: T }
@@ -13,10 +12,6 @@ export type UserOpResult<T> =
 
 function fail<T>(status: number, message: string): UserOpResult<T> {
   return { ok: false, status, message };
-}
-
-function generateTempPassword(): string {
-  return randomBytes(12).toString("base64url"); // 16 chars, over the 12 minimum
 }
 
 /** Create an admin with a server-generated temp password (shown once). */
@@ -107,6 +102,13 @@ export async function resetAdminPassword(input: {
       .set({ passwordHash: await hash(tempPassword), mustChangePassword: true })
       .where(eq(admins.id, input.adminId));
     await tx.delete(sessions).where(eq(sessions.adminId, input.adminId));
+    await logEvent(tx, {
+      projectId: null,
+      actor: "admin",
+      actorId: input.actingAdminId,
+      eventType: "admin.password_reset",
+      payload: { adminId: input.adminId, email: target.email },
+    });
   });
   return { ok: true, value: { tempPassword } };
 }
@@ -125,6 +127,13 @@ export async function reactivateAdmin(input: {
     .update(admins)
     .set({ active: true })
     .where(eq(admins.id, input.adminId));
+  await logEvent(db, {
+    projectId: null,
+    actor: "admin",
+    actorId: input.actingAdminId,
+    eventType: "admin.reactivated",
+    payload: { adminId: input.adminId, email: target.email },
+  });
   return { ok: true, value: { reactivated: true } };
 }
 

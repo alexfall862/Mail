@@ -371,7 +371,12 @@ and cleaned by the R2 lifecycle rule in the setup checklist).
   Minimum length 12; no other composition rules.
 - Superuser-only screens: manage admins (create with temp password, deactivate —
   which also deletes their sessions —, reset password) and the reopen action (§5 #10).
-- No self-signup, no password reset emails (superuser resets manually).
+- No self-signup, no password reset emails (superuser resets manually). The login
+  page says so, pointing at `ADMIN_SUPPORT_EMAIL` when it is set.
+- Break-glass: a locked-out superuser has no one above them to reset from the UI, so
+  `npm run admin:reset-password -- <email>` does the same reset from the database side
+  (temp password, forced change, sessions ended, `admin.password_reset` event with
+  actor `system`). Passwords are never recoverable — argon2id is one-way.
 
 ## 8. Routes / pages
 
@@ -497,6 +502,7 @@ RESEND_API_KEY
 EMAIL_FROM                   # KDP Mail Program <mail-approval@kansasdems.org>
 TURNSTILE_SITE_KEY           # public, used client-side
 TURNSTILE_SECRET_KEY
+ADMIN_SUPPORT_EMAIL          # optional; reset contact shown on the login page
 SEED_SUPERUSER_EMAIL         # alex@kansasdems.org
 SEED_SUPERUSER_PASSWORD      # temp; forced change on first login
 ```

@@ -60,6 +60,10 @@ contradiction resolved by the implementer — flagged for explicit review.
 - Review notes are required for "Request changes" and "Deny" (the vendor receives them verbatim per §12); optional for "Advance".
 - CSV `?year=` filters by mail-date year (the operative campaign year), for live rows and tombstones alike.
 - New/reset admin accounts get a server-generated 16-char temp password shown once to the superuser (§7 says "create with temp password" without specifying who picks it); reset and deactivate both end the target's sessions. Reactivation added as the undo for deactivation.
+- Password reset and reactivation log `admin.password_reset` / `admin.reactivated` events, matching `admin.created` / `admin.deactivated`; §4 lists only the latter two, but leaving the credential-changing op unaudited was the odd one out.
+- `npm run admin:reset-password -- <email>` is the break-glass reset for a locked-out superuser, who by definition has no superuser above them to use the UI. It's a CLI rather than an email flow because §7 rules out reset emails; access to `DATABASE_URL` is the authorization. It logs the same event with actor `system`.
+- `normalizeEmail` and the temp-password generator moved to `src/lib/admin-credentials.ts` so that CLI can share them without importing `next/headers` via `lib/auth`; `lib/auth` re-exports `normalizeEmail` so existing call sites are unchanged.
+- Login page carries a "Forgot your password?" note (spec is silent on it) — without one, a locked-out admin has no on-screen hint that the path is "ask a superuser". Optional `ADMIN_SUPPORT_EMAIL` makes it a mailto.
 - Admin project page links the current invoice via presigned GET (the final-review "costs match invoice" checklist needs it; §6 lists artwork display only).
 - A superuser can't deactivate their own account.
 - Deny asks for a browser confirm() since it's terminal.
