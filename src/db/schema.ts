@@ -109,6 +109,8 @@ export const projects = pgTable(
     id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
     candidateSupported: text("candidate_supported").notNull(),
     description: text("description").notNull(),
+    // Optional supporting material for factual claims in the piece (links, notes).
+    citationsAndClaims: text("citations_and_claims"),
     office: officeType("office").notNull(),
     // Free text: district/county; REQUIRED in app when office='other' (and per §9,
     // for state_senate, state_house, county_party, municipal_county_office).

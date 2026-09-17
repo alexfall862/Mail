@@ -12,6 +12,7 @@ import { admins, sessions } from "@/db/schema";
 import { SESSION_COOKIE } from "./session-cookie";
 
 export { SESSION_COOKIE };
+export { normalizeEmail } from "./admin-credentials";
 export const SESSION_DAYS = 30;
 
 export type SessionAdmin = {
@@ -115,8 +116,4 @@ function isUuid(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
     value,
   );
-}
-
-export function normalizeEmail(email: string): string {
-  return email.trim().toLowerCase();
 }

@@ -161,6 +161,14 @@ export default async function AdminProjectPage({
             {project.description}
           </p>
         </div>
+        {project.citationsAndClaims ? (
+          <div className="sm:col-span-2 lg:col-span-3">
+            <p className="text-xs uppercase text-gray-500">Citations and claims</p>
+            <p className="mt-0.5 whitespace-pre-line break-words text-gray-900">
+              {project.citationsAndClaims}
+            </p>
+          </div>
+        ) : null}
       </section>
 
       {/* Campaign contact (admin-owned; suggestions from the known roster) */}

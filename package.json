@@ -11,6 +11,7 @@
     "db:migrate": "tsx scripts/migrate.ts",
     "db:seed": "tsx scripts/seed.ts",
     "db:setup": "tsx scripts/migrate.ts && tsx scripts/seed.ts",
+    "admin:reset-password": "tsx scripts/reset-password.ts",
     "railway:start": "npm run db:setup && next start"
   },
   "dependencies": {

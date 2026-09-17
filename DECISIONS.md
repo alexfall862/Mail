@@ -48,7 +48,7 @@ contradiction resolved by the implementer — flagged for explicit review.
 
 ## Phase 5 — Vendor surface
 
-- "Today" for the mail-date rule is computed in America/Chicago; the rule also applies on resubmission (a stale past mail date must be updated to resubmit).
+- "Today" for the mail-date rule is computed in America/Chicago. On resubmission the floor is the *lesser* of the two-business-day rule and the date the original submission already locked in (`resubmitMailDateFloor`): a revision round-trip must never force the mailing later than the date we accepted on day one — submit 2/1 for 2/5, resubmit 2/4, and 2/5 still stands. Moving the date earlier than the original is still refused, and a stale past mail date must still be updated to resubmit. The wire schema can't check this (the payload isn't trusted for the current date), so `resubmitProject` enforces it against the locked project row; the form uses the same helper for the picker's `min` and its pre-flight check.
 - Contacts are editable on resubmission (per §5's "contacts" in the routing rule); admin payment data (`paid_at`, `paid_marked_by`) is preserved for roles that remain, removed roles are deleted, new roles added.
 - `version.submitted` is logged for v1 as well as resubmissions; the v1 flow also logs `project.created`, per-file `file.uploaded`, and the automatic `status.changed`.
 - The submission response body contains no magic link (it's emailed only); `/submit/success` says so. `/p/{token}` pages send `robots: noindex`.
@@ -60,6 +60,12 @@ contradiction resolved by the implementer — flagged for explicit review.
 - Review notes are required for "Request changes" and "Deny" (the vendor receives them verbatim per §12); optional for "Advance".
 - CSV `?year=` filters by mail-date year (the operative campaign year), for live rows and tombstones alike.
 - New/reset admin accounts get a server-generated 16-char temp password shown once to the superuser (§7 says "create with temp password" without specifying who picks it); reset and deactivate both end the target's sessions. Reactivation added as the undo for deactivation.
+- Password reset and reactivation log `admin.password_reset` / `admin.reactivated` events, matching `admin.created` / `admin.deactivated`; §4 lists only the latter two, but leaving the credential-changing op unaudited was the odd one out.
+- `npm run admin:reset-password -- <email>` is the break-glass reset for a locked-out superuser, who by definition has no superuser above them to use the UI. It's a CLI rather than an email flow because §7 rules out reset emails; access to `DATABASE_URL` is the authorization. It logs the same event with actor `system`.
+- `normalizeEmail` and the temp-password generator moved to `src/lib/admin-credentials.ts` so that CLI can share them without importing `next/headers` via `lib/auth`; `lib/auth` re-exports `normalizeEmail` so existing call sites are unchanged.
+- The superuser recovery path is `db:seed --force-password` (rewrites the hash from `SEED_SUPERUSER_PASSWORD`) rather than a login-time check against that env var. Considered and rejected: comparing the submitted password to `SEED_SUPERUSER_PASSWORD` in the login route would make a never-rotatable env value into a standing superuser credential, indistinguishable in `admin.login` from a real sign-in. Rewriting the hash keeps the env value transient — `must_change_password` is always set, so it stops working as soon as recovery finishes.
+- Both recovery scripts share `applyPasswordReset` in `src/lib/admin-recovery.ts` so the session purge and `admin.password_reset` event can't drift apart. It uses relative imports and a type-only `../db` import, since tsx doesn't resolve the `@/` alias and the scripts must not construct the app's pool.
+- Login page carries a "Forgot your password?" note (spec is silent on it) — without one, a locked-out admin has no on-screen hint that the path is "ask a superuser". Optional `ADMIN_SUPPORT_EMAIL` makes it a mailto.
 - Admin project page links the current invoice via presigned GET (the final-review "costs match invoice" checklist needs it; §6 lists artwork display only).
 - A superuser can't deactivate their own account.
 - Deny asks for a browser confirm() since it's terminal.

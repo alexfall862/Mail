@@ -21,6 +21,7 @@ import {
 import { encryptVendorToken } from "./token-crypto";
 import { generateVendorToken, hashVendorToken } from "./tokens";
 import { verifyClaimedFile, type UploadKind } from "./uploads";
+import { resubmitMailDateFloor } from "./schemas/project";
 import type {
   ContactInput,
   FileClaim,
@@ -61,6 +62,7 @@ function projectValues(fields: ProjectFields) {
   return {
     candidateSupported: fields.candidateSupported,
     description: fields.description,
+    citationsAndClaims: fields.citationsAndClaims?.trim() ? fields.citationsAndClaims.trim() : null,
     office: fields.office,
     districtDetail: fields.districtDetail?.trim() ? fields.districtDetail.trim() : null,
     pieceCount: fields.pieceCount,
@@ -233,6 +235,14 @@ export async function resubmitProject(
           .from(projects)
           .where(eq(projects.id, projectId));
         if (!project) return fail(404, "This link is no longer valid.");
+
+        // Lead time is measured against the stored mail date, not today: a
+        // revision round-trip must not push the mailing past the date the
+        // original submission already locked in.
+        const mailDateFloor = resubmitMailDateFloor(project.mailDate);
+        if (input.project.mailDate < mailDateFloor.min) {
+          return fail(400, mailDateFloor.message);
+        }
 
         const currentVersionId = project.currentVersionId;
         if (!currentVersionId) return fail(500, "Project has no current version.");
@@ -434,6 +444,7 @@ function hasFieldChanges(
   current: {
     candidateSupported: string;
     description: string;
+    citationsAndClaims: string | null;
     office: string;
     districtDetail: string | null;
     pieceCount: number;
@@ -445,9 +456,11 @@ function hasFieldChanges(
   next: ProjectFields,
 ): boolean {
   const nextDistrict = next.districtDetail?.trim() ? next.districtDetail.trim() : null;
+  const nextCitations = next.citationsAndClaims?.trim() ? next.citationsAndClaims.trim() : null;
   return (
     current.candidateSupported !== next.candidateSupported ||
     current.description !== next.description ||
+    current.citationsAndClaims !== nextCitations ||
     current.office !== next.office ||
     current.districtDetail !== nextDistrict ||
     current.pieceCount !== next.pieceCount ||

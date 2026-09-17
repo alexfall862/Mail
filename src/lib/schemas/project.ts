@@ -85,6 +85,48 @@ export function minMailDate(today: string = todayInKansas()): string {
   return date.toISOString().slice(0, 10);
 }
 
+/** The earliest mail date a form will accept, plus the message if it doesn't. */
+export type MailDateFloor = {
+  min: string;
+  message: string;
+  /** True when `min` is a carried-over date rather than the lead-time rule. */
+  grandfathered: boolean;
+};
+
+const LEAD_TIME_MESSAGE =
+  "Mail date must be at least two full business days from today.";
+
+/** New submissions: the plain two-full-business-day rule. */
+export function newMailDateFloor(today: string = todayInKansas()): MailDateFloor {
+  return {
+    min: minMailDate(today),
+    message: LEAD_TIME_MESSAGE,
+    grandfathered: false,
+  };
+}
+
+/**
+ * Resubmissions grandfather the date the original submission already locked
+ * in: an edit round-trip must never force the mailing later than the date we
+ * accepted on day one (submit 2/1 for 2/5, resubmit 2/4 — 2/5 still stands).
+ * Moving the date *earlier* than that is still refused, and once the original
+ * date has passed the standard lead time applies again.
+ */
+export function resubmitMailDateFloor(
+  currentMailDate: string,
+  today: string = todayInKansas(),
+): MailDateFloor {
+  const standard = minMailDate(today);
+  if (currentMailDate >= today && currentMailDate < standard) {
+    return {
+      min: currentMailDate,
+      message: `Mail date can't be earlier than ${currentMailDate}, the date on your original submission.`,
+      grandfathered: true,
+    };
+  }
+  return { min: standard, message: LEAD_TIME_MESSAGE, grandfathered: false };
+}
+
 const baseProjectFields = z.object({
     candidateSupported: z
       .string()
@@ -92,6 +134,7 @@ const baseProjectFields = z.object({
       .min(1, "Candidate or cause supported is required.")
       .max(200),
     description: z.string().trim().min(1, "Description is required.").max(5000),
+    citationsAndClaims: z.string().trim().max(10000).optional(),
     office: z.enum(OFFICE_VALUES),
     districtDetail: z.string().trim().max(300).optional(),
     pieceCount: z
@@ -116,8 +159,8 @@ const baseProjectFields = z.object({
     // set on the ticket (with known-roster suggestions), not vendor intake.
   });
 
-function refineProjectFields(
-  data: { office: Office; districtDetail?: string; mailDate: string },
+function refineDistrict(
+  data: { office: Office; districtDetail?: string },
   ctx: z.RefinementCtx,
 ): void {
   if (
@@ -130,27 +173,52 @@ function refineProjectFields(
       message: `${DISTRICT_DETAIL_LABEL} is required for this office.`,
     });
   }
-  if (data.mailDate < minMailDate()) {
-    ctx.addIssue({
-      code: "custom",
-      path: ["mailDate"],
-      message: "Mail date must be at least two full business days from today.",
-    });
+}
+
+function refineMailDate(
+  mailDate: string,
+  floor: MailDateFloor,
+  ctx: z.RefinementCtx,
+): void {
+  if (mailDate < floor.min) {
+    ctx.addIssue({ code: "custom", path: ["mailDate"], message: floor.message });
   }
 }
 
-export const projectFieldsSchema = baseProjectFields.superRefine(refineProjectFields);
+export const projectFieldsSchema = baseProjectFields.superRefine((data, ctx) => {
+  refineDistrict(data, ctx);
+  // Evaluated per parse, not at module load, so "today" stays current.
+  refineMailDate(data.mailDate, newMailDateFloor(), ctx);
+});
 export type ProjectFields = z.infer<typeof projectFieldsSchema>;
+
+const baseResubmitFields = baseProjectFields.extend({
+  totalCostCents: baseProjectFields.shape.totalCostCents.optional(),
+});
 
 /**
  * Resubmission variant: total cost is optional and the pre-filled form leaves
  * it blank, so the vendor's quoted price never appears on the status page
  * (campaigns get that link). Omitted cost carries the current value forward.
+ *
+ * The mail-date floor is deliberately *not* checked here: it depends on the
+ * date the project already locked in, which the wire payload can't be trusted
+ * for. `resubmitProject` enforces it against the stored row.
  */
-export const resubmitProjectFieldsSchema = baseProjectFields
-  .extend({ totalCostCents: baseProjectFields.shape.totalCostCents.optional() })
-  .superRefine(refineProjectFields);
+export const resubmitProjectFieldsSchema =
+  baseResubmitFields.superRefine(refineDistrict);
 export type ResubmitProjectFields = z.infer<typeof resubmitProjectFieldsSchema>;
+
+/**
+ * Client-side resubmission schema, bound to the project's current mail date so
+ * the pre-filled value validates even once it's inside the lead-time window.
+ */
+export function resubmitProjectFieldsSchemaFor(currentMailDate: string) {
+  return baseResubmitFields.superRefine((data, ctx) => {
+    refineDistrict(data, ctx);
+    refineMailDate(data.mailDate, resubmitMailDateFloor(currentMailDate), ctx);
+  });
+}
 
 export const contactSchema = z.object({
   role: z.enum(VENDOR_ROLE_VALUES),

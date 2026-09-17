@@ -98,6 +98,7 @@ create table projects (
   id                   uuid primary key default gen_random_uuid(),
   candidate_supported  text not null,
   description          text not null,
+  citations_and_claims text,          -- optional: links/notes supporting claims in the piece
   office               office_type not null,
   district_detail      text,          -- free text: district/county; REQUIRED in app when office='other'
   piece_count          integer not null check (piece_count > 0),
@@ -370,7 +371,15 @@ and cleaned by the R2 lifecycle rule in the setup checklist).
   Minimum length 12; no other composition rules.
 - Superuser-only screens: manage admins (create with temp password, deactivate —
   which also deletes their sessions —, reset password) and the reopen action (§5 #10).
-- No self-signup, no password reset emails (superuser resets manually).
+- No self-signup, no password reset emails (superuser resets manually). The login
+  page says so, pointing at `ADMIN_SUPPORT_EMAIL` when it is set.
+- Break-glass: a locked-out superuser has no one above them to reset from the UI, so
+  two CLIs do the same reset from the database side — `npm run admin:reset-password --
+  <email>` (fresh random temp password, any admin) and `npm run db:seed --
+  --force-password` (the seed superuser, from `SEED_SUPERUSER_PASSWORD`). Both end the
+  account's sessions, force a change at next sign-in, and log `admin.password_reset`
+  with actor `system`. `--force-password` is never automatic: `db:setup` runs on every
+  Railway boot. Passwords are never recoverable — argon2id is one-way.
 
 ## 8. Routes / pages
 
@@ -406,12 +415,15 @@ Keys live in one config file so KDP can adjust between cycles without a migratio
 
 ## 9. Submission form fields
 
-General: candidate_supported (text, req), description (textarea, req), office (select of
+General: candidate_supported (text, req), description (textarea, req), citations_and_claims
+(textarea, optional; links/notes supporting claims in the piece), office (select of
 enum incl. "Other", req), district_detail (text; label "District / County / Specify office",
 required when office = state_senate, state_house, county_party, municipal_county_office,
 or other), piece_count (int > 0, req), total_cost (dollars input, stored as cents, req),
-post_office_location (text, req), permit_number (text, req), mail_date (date, must be
-today or later, req).
+post_office_location (text, req), permit_number (text, req), mail_date (date, req; at
+least two full business days out on a new submission. On resubmission the project's
+existing mail date is grandfathered in, so requested edits never force the mailing to
+slip; earlier-than-original and already-past dates still fail).
 
 Vendors: three optional blocks (Designer/Consultant, Print Shop, Mail House), each with
 org_name, contact_name, email, phone (opt), paid_by_kdp (checkbox, the "needs to be paid
@@ -439,7 +451,7 @@ No emails on delete.
 
 `GET /admin/export?status=&year=` → CSV, one row per project (including tombstones as
 rows flagged `deleted=true` with their preserved columns): id, candidate, office,
-district_detail, description, pieces, total_cost (dollars), mail_date, status,
+district_detail, description, citations_and_claims, pieces, total_cost (dollars), mail_date, status,
 status_changed_at, created_at, permit_number, post_office_location, then per role
 (designer/print/mail): org, contact, email, paid_by_kdp, paid_at — plus `fully_paid`.
 Excel-safe encoding (UTF-8 BOM), proper quoting.
@@ -493,6 +505,7 @@ RESEND_API_KEY
 EMAIL_FROM                   # KDP Mail Program <mail-approval@kansasdems.org>
 TURNSTILE_SITE_KEY           # public, used client-side
 TURNSTILE_SECRET_KEY
+ADMIN_SUPPORT_EMAIL          # optional; reset contact shown on the login page
 SEED_SUPERUSER_EMAIL         # alex@kansasdems.org
 SEED_SUPERUSER_PASSWORD      # temp; forced change on first login
 ```

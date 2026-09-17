@@ -22,10 +22,11 @@ import {
   DISTRICT_DETAIL_LABEL,
   DISTRICT_REQUIRED_OFFICES,
   DISTRICT_TOOLTIP,
-  minMailDate,
+  newMailDateFloor,
   OFFICES,
   projectFieldsSchema,
-  resubmitProjectFieldsSchema,
+  resubmitMailDateFloor,
+  resubmitProjectFieldsSchemaFor,
   VENDOR_ROLES,
   type ContactInput,
   type FileClaim,
@@ -82,10 +83,17 @@ export function ProjectForm(props: ProjectFormProps) {
     initial?.currentKinds.includes("artwork_front") ?? false;
   const prevCombined =
     initial?.currentKinds.includes("artwork_combined") ?? false;
+  // Resubmissions keep the mail date the original submission locked in, even
+  // once it's inside the two-business-day window.
+  const mailDateFloor =
+    initial === null
+      ? newMailDateFloor()
+      : resubmitMailDateFloor(initial.project.mailDate);
 
   const [fields, setFields] = useState(() => ({
     candidateSupported: initial?.project.candidateSupported ?? "",
     description: initial?.project.description ?? "",
+    citationsAndClaims: initial?.project.citationsAndClaims ?? "",
     office: (initial?.project.office ?? "") as Office | "",
     districtDetail: initial?.project.districtDetail ?? "",
     pieceCount: initial ? String(initial.project.pieceCount) : "",
@@ -170,6 +178,7 @@ export function ProjectForm(props: ProjectFormProps) {
     const candidate: ResubmitProjectFields = {
       candidateSupported: fields.candidateSupported,
       description: fields.description,
+      citationsAndClaims: fields.citationsAndClaims || undefined,
       office: (fields.office || "other") as Office,
       districtDetail: fields.districtDetail || undefined,
       pieceCount: Number.isFinite(pieceCount) ? pieceCount : 0,
@@ -180,7 +189,9 @@ export function ProjectForm(props: ProjectFormProps) {
     };
     if (!fields.office) return "Select the office.";
     const schema =
-      props.mode === "new" ? projectFieldsSchema : resubmitProjectFieldsSchema;
+      initial === null
+        ? projectFieldsSchema
+        : resubmitProjectFieldsSchemaFor(initial.project.mailDate);
     const parsed = schema.safeParse(candidate);
     if (!parsed.success) return parsed.error.issues[0]?.message ?? "Check the form fields.";
     return parsed.data;
@@ -431,6 +442,22 @@ export function ProjectForm(props: ProjectFormProps) {
             onChange={(e) => setField("description", e.target.value)}
           />
         </div>
+        <div>
+          <label htmlFor="citationsAndClaims" className={labelCls}>
+            Citations and claims
+          </label>
+          <p className="text-xs text-gray-500">
+            Optional. Links, sources, or explanations that support any claims
+            made in the piece.
+          </p>
+          <textarea
+            id="citationsAndClaims"
+            rows={3}
+            className={inputCls}
+            value={fields.citationsAndClaims}
+            onChange={(e) => setField("citationsAndClaims", e.target.value)}
+          />
+        </div>
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <label htmlFor="office" className={labelCls}>
@@ -536,13 +563,15 @@ export function ProjectForm(props: ProjectFormProps) {
             <input
               id="maildate"
               type="date"
-              min={minMailDate()}
+              min={mailDateFloor.min}
               className={inputCls}
               value={fields.mailDate}
               onChange={(e) => setField("mailDate", e.target.value)}
             />
             <p className="mt-1 text-xs text-gray-500">
-              Must be at least two full business days from today.
+              {mailDateFloor.grandfathered
+                ? "Your original mail date still stands — keep it, or pick a later one."
+                : "Must be at least two full business days from today."}
             </p>
           </div>
         </div>
