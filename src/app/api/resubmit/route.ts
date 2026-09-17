@@ -15,7 +15,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   if (originError) return originError;
 
   const ip = getClientIp(request);
-  const limit = rateLimit("submission", ip); // same 5/hour per IP as submission
+  const limit = rateLimit("submission", ip); // same 10/hour per IP as submission
   if (!limit.allowed) return rateLimited(limit);
 
   const parsed = resubmitRequestSchema.safeParse(

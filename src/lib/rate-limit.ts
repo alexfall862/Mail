@@ -9,8 +9,8 @@ const buckets = new Map<string, Window>();
 
 // Named limits from SPEC §13.
 export const LIMITS = {
-  presign: { max: 20, windowMs: 60 * 60 * 1000 }, // 20/hour per IP
-  submission: { max: 5, windowMs: 60 * 60 * 1000 }, // 5/hour per IP
+  presign: { max: 40, windowMs: 60 * 60 * 1000 }, // 40/hour per IP
+  submission: { max: 10, windowMs: 60 * 60 * 1000 }, // 10/hour per IP
   tokenLookup: { max: 30, windowMs: 60 * 1000 }, // 30/min per IP
   login: { max: 5, windowMs: 15 * 60 * 1000 }, // 5/15min per (IP, email)
   reviewResponse: { max: 20, windowMs: 60 * 60 * 1000 }, // 20/hour per IP

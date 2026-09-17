@@ -337,7 +337,7 @@ and cleaned by the R2 lifecycle rule in the setup checklist).
 - Presign endpoint enforces content-type whitelist and size caps (8 MB artwork / 10 MB invoice).
 - On final submit, server `HEAD`s each claimed R2 key to confirm existence, size, and
   content-type before creating rows.
-- Rate limit presigns: 20/hour per IP.
+- Rate limit presigns: 40/hour per IP.
 
 ### Review display
 
@@ -466,8 +466,8 @@ magic link in admin emails.
 ## 13. Security requirements
 
 - Turnstile verified server-side on: public submission, admin login.
-- Rate limits (in-memory per-instance is acceptable at this scale): presign 20/hr/IP,
-  submission 5/hr/IP, token lookup 30/min/IP, login 5/15min/(IP,email).
+- Rate limits (in-memory per-instance is acceptable at this scale): presign 40/hr/IP,
+  submission 10/hr/IP, token lookup 30/min/IP, login 5/15min/(IP,email).
 - All state-changing endpoints: POST with same-origin check (Origin header) — cookie
   auth for admin, token auth for vendor. No CSRF token machinery needed beyond that.
 - Zod-validate every request body; never interpolate user input into SQL (Drizzle

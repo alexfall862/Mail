@@ -5,8 +5,8 @@ describe("rate limiter (§13 limits)", () => {
   beforeEach(() => resetRateLimits());
 
   it("declares the exact limits from the spec", () => {
-    expect(LIMITS.presign).toEqual({ max: 20, windowMs: 3_600_000 });
-    expect(LIMITS.submission).toEqual({ max: 5, windowMs: 3_600_000 });
+    expect(LIMITS.presign).toEqual({ max: 40, windowMs: 3_600_000 });
+    expect(LIMITS.submission).toEqual({ max: 10, windowMs: 3_600_000 });
     expect(LIMITS.tokenLookup).toEqual({ max: 30, windowMs: 60_000 });
     expect(LIMITS.login).toEqual({ max: 5, windowMs: 900_000 });
   });

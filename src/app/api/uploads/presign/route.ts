@@ -17,7 +17,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   if (originError) return originError;
 
   const ip = getClientIp(request);
-  const limit = rateLimit("presign", ip); // §6: 20/hour per IP
+  const limit = rateLimit("presign", ip); // §6: 40/hour per IP
   if (!limit.allowed) return rateLimited(limit);
 
   const parsed = presignRequestSchema.safeParse(
