@@ -51,6 +51,8 @@ export async function GET(request: Request): Promise<NextResponse> {
       `${role}_email`,
       `${role}_paid_by_kdp`,
       `${role}_paid_at`,
+      `${role}_check_number`,
+      `${role}_paid_amount`,
     );
   }
   header.push("fully_paid", "deleted");
@@ -99,6 +101,8 @@ export async function GET(request: Request): Promise<NextResponse> {
         c?.email ?? "",
         c ? String(c.paidByKdp) : "",
         c?.paidAt?.toISOString() ?? "",
+        c?.paidCheckNumber ?? "",
+        c?.paidAmountCents != null ? (c.paidAmountCents / 100).toFixed(2) : "",
       );
     }
     const needing = pContacts.filter((c) => c.paidByKdp);
@@ -134,7 +138,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       "",
     ];
     for (let i = 0; i < VENDOR_ROLE_VALUES.length; i++) {
-      row.push("", "", "", "", "");
+      row.push("", "", "", "", "", "", "");
     }
     row.push("", "true");
     rows.push(row);

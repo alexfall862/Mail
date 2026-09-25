@@ -1,7 +1,15 @@
 import Link from "next/link";
 import { getDashboardRows, type DashboardRow } from "@/lib/admin-ops";
 import { formatDate, formatMoney } from "@/lib/format";
+import {
+  buildCheckRegister,
+  summarizePayments,
+  type CheckRegisterEntry,
+  type PaymentSummary,
+} from "@/lib/payments";
 import { daysUntil, scheduleSlack, urgencyTier } from "@/lib/priority";
+import { ApprovedPaymentsTable } from "./approved-payments-table";
+import { CheckRegister } from "./check-register";
 import { officeLabel, type Office } from "@/lib/schemas/project";
 import {
   PROJECT_STATUSES,
@@ -36,7 +44,15 @@ export default async function AdminDashboardPage({
   )
     ? (status as ProjectStatus)
     : undefined;
-  const rows = await getDashboardRows(statusFilter);
+  // Load everything once: the status filter is applied in memory (~100 rows a
+  // year) so the check register can always cover every recorded payment,
+  // whichever filter is active.
+  const allRows = await getDashboardRows();
+  const rows = statusFilter
+    ? allRows.filter((r) => r.status === statusFilter)
+    : allRows;
+  const checkRegister = buildCheckRegister(allRows);
+  const paymentSummary = summarizePayments(allRows);
 
   // Active work ranked by schedule slack (least room first); approved and
   // denied kept out of the way in their own tables.
@@ -84,6 +100,14 @@ export default async function AdminDashboardPage({
             </>
           )}
         </div>
+      ) : statusFilter === "approved" ? (
+        <>
+          <ApprovedPaymentsTable rows={rows} />
+          <PaymentsSection
+            summary={paymentSummary}
+            entries={checkRegister}
+          />
+        </>
       ) : statusFilter ? (
         <ProjectTable
           rows={TERMINAL.includes(statusFilter) ? rows : active}
@@ -107,9 +131,20 @@ export default async function AdminDashboardPage({
 
           {approved.length > 0 && (
             <>
-              <SectionHeading title="Approved" count={approved.length} />
-              <ProjectTable rows={approved} showUrgency={false} now={now} />
+              <SectionHeading
+                title="Approved"
+                count={approved.length}
+                hint={approvedHint(paymentSummary)}
+              />
+              <ApprovedPaymentsTable rows={approved} />
             </>
+          )}
+
+          {(approved.length > 0 || checkRegister.length > 0) && (
+            <PaymentsSection
+              summary={paymentSummary}
+              entries={checkRegister}
+            />
           )}
 
           {denied.length > 0 && (
@@ -140,6 +175,50 @@ function SectionHeading({
       </h2>
       {hint && <p className="text-xs text-gray-500">{hint}</p>}
     </div>
+  );
+}
+
+/** One-line payment status for the Approved heading. */
+function approvedHint(s: PaymentSummary): string | undefined {
+  if (s.approvedBillable === 0) return undefined;
+  const parts = [`${s.approvedFullyPaid}/${s.approvedBillable} fully paid`];
+  if (s.vendorsAwaiting > 0) {
+    parts.push(
+      `${s.vendorsAwaiting} vendor payment${s.vendorsAwaiting === 1 ? "" : "s"} outstanding`,
+    );
+  }
+  parts.push("click a paid badge to record a check");
+  return parts.join(" · ");
+}
+
+/** Check register with its heading; shown under the approved table. */
+function PaymentsSection({
+  summary,
+  entries,
+}: {
+  summary: PaymentSummary;
+  entries: CheckRegisterEntry[];
+}) {
+  const hintParts: string[] = [];
+  if (summary.checksRecorded > 0) {
+    hintParts.push(
+      `${summary.checksRecorded} check${summary.checksRecorded === 1 ? "" : "s"} recorded`,
+    );
+  }
+  if (summary.paidWithoutCheck > 0) {
+    hintParts.push(
+      `${summary.paidWithoutCheck} payment${summary.paidWithoutCheck === 1 ? "" : "s"} missing a check #`,
+    );
+  }
+  return (
+    <>
+      <SectionHeading
+        title="Payments by check"
+        count={entries.length}
+        hint={hintParts.length > 0 ? hintParts.join(" · ") : undefined}
+      />
+      <CheckRegister entries={entries} />
+    </>
   );
 }
 

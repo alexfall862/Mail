@@ -10,10 +10,11 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { admins, contacts, projects } from "@/db/schema";
 import { logEvent } from "@/lib/events";
-import { formatDate } from "@/lib/format";
+import { formatDate, projectRef } from "@/lib/format";
 import { officeLabel, type Office } from "@/lib/schemas/project";
 import { decryptVendorToken } from "@/lib/token-crypto";
 import { vendorLinkUrl } from "@/lib/tokens";
+import { threadHeaders } from "./threading";
 import type { EmailContent, ProjectSummary } from "./templates";
 
 let client: Resend | null = null;
@@ -46,6 +47,7 @@ export async function sendAndLog(
       subject: content.subject,
       html: content.html,
       text: content.text,
+      headers: threadHeaders(projectId),
     });
     if (error) throw new Error(error.message);
     await logEvent(db, {
@@ -109,6 +111,7 @@ export async function projectEmailContext(
   const raw = decryptVendorToken(project.vendorTokenEncrypted);
   return {
     summary: {
+      ref: projectRef(project.id),
       candidateSupported: project.candidateSupported,
       officeLabel: officeLabel(project.office as Office),
       mailDateFormatted: formatDate(project.mailDate),

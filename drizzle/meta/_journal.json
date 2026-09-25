@@ -50,6 +50,13 @@
       "when": 1788893632998,
       "tag": "0006_citations_and_claims",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1790349129179,
+      "tag": "0007_payment_checks",
+      "breakpoints": true
     }
   ]
 }

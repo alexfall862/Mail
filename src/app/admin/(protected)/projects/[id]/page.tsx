@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { getAdminProjectView } from "@/lib/admin-ops";
 import { getSessionAdmin } from "@/lib/auth";
-import { formatDate, formatDateTime, formatMoney } from "@/lib/format";
+import { formatDate, formatDateTime, formatMoney, projectRef } from "@/lib/format";
 import { presignGet } from "@/lib/r2";
 import {
   DISTRICT_DETAIL_LABEL,
@@ -26,13 +26,14 @@ import {
   CampaignReviewEmailButton,
   DeleteProjectButton,
   OverrideWaitButton,
-  PaidCheckbox,
   RegenerateLinkButton,
   ReopenButton,
   ReviewerNoticeButtons,
   ReviewPanel,
 } from "./actions";
 import { VersionCompare, type ArtworkSet } from "./version-compare";
+import { VendorPaymentControl } from "@/components/vendor-payment";
+import { AmendCostControl } from "@/components/amend-cost";
 
 export const metadata = { title: "Project - KDP Mail Approval" };
 export const dynamic = "force-dynamic";
@@ -135,9 +136,22 @@ export default async function AdminProjectPage({
 
       {/* Facts grid */}
       <section className="grid gap-x-8 gap-y-3 rounded-lg border border-gray-200 bg-white p-5 text-sm sm:grid-cols-2 lg:grid-cols-3">
+        <Fact label="Reference" value={`#${projectRef(project.id)}`} />
         <Fact label="Mail date" value={formatDate(project.mailDate)} />
         <Fact label="Pieces" value={project.pieceCount.toLocaleString()} />
-        <Fact label="Total cost" value={formatMoney(project.totalCostCents)} />
+        {status === "approved" ? (
+          <div>
+            <p className="text-xs uppercase text-gray-500">Total cost</p>
+            <div className="mt-0.5">
+              <AmendCostControl
+                projectId={project.id}
+                totalCostCents={project.totalCostCents}
+              />
+            </div>
+          </div>
+        ) : (
+          <Fact label="Total cost" value={formatMoney(project.totalCostCents)} />
+        )}
         <Fact label="Post office" value={project.postOfficeLocation} />
         <Fact label="Permit number" value={project.permitNumber} />
         <Fact
@@ -420,18 +434,23 @@ export default async function AdminProjectPage({
                 </p>
               </div>
               {c.paidByKdp ? (
-                <div className="text-right">
-                  <PaidCheckbox
-                    projectId={project.id}
-                    contactId={c.id}
-                    paid={c.paidAt !== null}
-                  />
-                  {c.paidAt && (
-                    <p className="mt-1 text-xs text-gray-500">
-                      {formatDateTime(c.paidAt)}
-                    </p>
-                  )}
-                </div>
+                <VendorPaymentControl
+                  projectId={project.id}
+                  showVendor={false}
+                  payment={{
+                    contactId: c.id,
+                    role: c.role,
+                    orgName: c.orgName,
+                    paidAt: c.paidAt?.toISOString() ?? null,
+                    checkNumber: c.paidCheckNumber,
+                    amountCents: c.paidAmountCents,
+                  }}
+                  suggestedAmountCents={
+                    contacts.filter((x) => x.paidByKdp).length === 1
+                      ? project.totalCostCents
+                      : null
+                  }
+                />
               ) : (
                 <span className="text-xs text-gray-400">
                   No KDP payment expected
@@ -620,6 +639,18 @@ function ChecklistSummary({ checklist }: { checklist: Record<string, boolean> })
   );
 }
 
+/** " (check #123, $1,234.00)" from a contact.paid / payment_updated payload. */
+function describeCheck(payload: Record<string, unknown>): string {
+  const parts: string[] = [];
+  if (typeof payload.checkNumber === "string" && payload.checkNumber) {
+    parts.push(`check #${payload.checkNumber}`);
+  }
+  if (typeof payload.amountCents === "number") {
+    parts.push(formatMoney(payload.amountCents));
+  }
+  return parts.length > 0 ? ` (${parts.join(", ")})` : "";
+}
+
 function describeEvent(
   type: string,
   payload: Record<string, unknown>,
@@ -654,11 +685,21 @@ function describeEvent(
     case "token.rotated":
       return `Vendor link regenerated${who}`;
     case "contact.paid":
-      return `Marked paid: ${String(payload.org ?? payload.role ?? "?")}${who}`;
+      return `Marked paid: ${String(payload.org ?? payload.role ?? "?")}${describeCheck(payload)}${who}`;
+    case "contact.payment_updated":
+      return `Payment details updated: ${String(payload.org ?? payload.role ?? "?")}${describeCheck(payload)}${who}`;
     case "contact.unpaid":
-      return `Marked unpaid: ${String(payload.org ?? payload.role ?? "?")}${who}`;
+      return `Marked unpaid: ${String(payload.org ?? payload.role ?? "?")}${
+        payload.previousCheckNumber ? ` (was check #${String(payload.previousCheckNumber)})` : ""
+      }${who}`;
     case "project.reopened":
       return `Reopened${who}: ${String(payload.reason ?? "")}`;
+    case "cost.amended":
+      return `Total cost amended ${
+        typeof payload.from === "number" ? formatMoney(payload.from) : "?"
+      } → ${typeof payload.to === "number" ? formatMoney(payload.to) : "?"}${who}${
+        payload.reason ? `: ${String(payload.reason)}` : ""
+      }`;
     case "campaign_contact.updated":
       return `Campaign contact set to ${String(payload.name ?? "?")} (${String(payload.email ?? "?")})${who}`;
     case "changes_request.overridden":

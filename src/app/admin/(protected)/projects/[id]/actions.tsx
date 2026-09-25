@@ -2,7 +2,7 @@
 
 /**
  * Client-side action widgets for the admin project detail page: review panel,
- * paid checkboxes, regenerate link, delete (typed confirmation), reopen
+ * regenerate link, delete (typed confirmation), reopen
  * (superuser). Each POSTs to its API route and refreshes the server page;
  * a losing concurrent action surfaces the server's clean "already moved"
  * message.
@@ -725,43 +725,6 @@ export function CampaignReviewEmailButton({
         {message && <span className="text-xs text-gray-600">{message}</span>}
       </div>
     </div>
-  );
-}
-
-export function PaidCheckbox({
-  projectId,
-  contactId,
-  paid,
-}: {
-  projectId: string;
-  contactId: string;
-  paid: boolean;
-}) {
-  const router = useRouter();
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  return (
-    <span className="inline-flex items-center gap-2">
-      <input
-        type="checkbox"
-        checked={paid}
-        disabled={busy}
-        onChange={async (e) => {
-          setBusy(true);
-          setError(null);
-          const result = await postJson(`/api/admin/projects/${projectId}/paid`, {
-            contactId,
-            paid: e.target.checked,
-          });
-          setBusy(false);
-          if (!result.ok) setError(result.message ?? "Failed.");
-          router.refresh();
-        }}
-      />
-      <span className="text-sm text-gray-700">Paid by KDP</span>
-      {error && <span className="text-xs text-red-700">{error}</span>}
-    </span>
   );
 }
 

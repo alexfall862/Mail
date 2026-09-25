@@ -57,6 +57,7 @@ import {
   overrideWait,
   regenerateLink,
   reopenProject,
+  amendProjectCost,
   setCampaignContact,
   setContactPaid,
 } from "@/lib/admin-ops";
@@ -596,8 +597,19 @@ describe("payment tracking, link rotation, dashboard", () => {
     const printShop = rows.find((c) => c.role === "print_shop")!;
     const mailHouse = rows.find((c) => c.role === "mail_house")!;
 
-    const paid = await setContactPaid({ projectId, contactId: printShop.id, paid: true, adminId });
+    const paid = await setContactPaid({
+      projectId,
+      contactId: printShop.id,
+      paid: true,
+      checkNumber: " 10482 ",
+      amountCents: 123456,
+      adminId,
+    });
     expect(paid.ok).toBe(true);
+    if (paid.ok) {
+      expect(paid.value.checkNumber).toBe("10482");
+      expect(paid.value.amountCents).toBe(123456);
+    }
     const notEligible = await setContactPaid({ projectId, contactId: mailHouse.id, paid: true, adminId });
     expect(notEligible.ok).toBe(false);
 
@@ -605,9 +617,95 @@ describe("payment tracking, link rotation, dashboard", () => {
     const row = dash.find((r) => r.id === projectId)!;
     expect(row.paidNeeded).toBe(1);
     expect(row.paidDone).toBe(1);
+    expect(row.payments).toHaveLength(1);
+    expect(row.payments[0]).toMatchObject({
+      contactId: printShop.id,
+      role: "print_shop",
+      orgName: "Print Co",
+      checkNumber: "10482",
+      amountCents: 123456,
+    });
+    expect(row.payments[0]!.paidAt).not.toBeNull();
+
+    // Amending the check on an already-paid vendor keeps the original paid_at
+    // and marker, changes only what was supplied, and logs a distinct event.
+    const [before] = await db.select().from(contacts).where(eq(contacts.id, printShop.id));
+    const amended = await setContactPaid({
+      projectId,
+      contactId: printShop.id,
+      paid: true,
+      checkNumber: "10490",
+      adminId: superuserId,
+    });
+    expect(amended.ok).toBe(true);
+    const [after] = await db.select().from(contacts).where(eq(contacts.id, printShop.id));
+    expect(after!.paidAt?.toISOString()).toBe(before!.paidAt?.toISOString());
+    expect(after!.paidMarkedBy).toBe(adminId);
+    expect(after!.paidCheckNumber).toBe("10490");
+    expect(after!.paidAmountCents).toBe(123456); // untouched: not supplied
 
     const unpaid = await setContactPaid({ projectId, contactId: printShop.id, paid: false, adminId });
     expect(unpaid.ok).toBe(true);
+    const [cleared] = await db.select().from(contacts).where(eq(contacts.id, printShop.id));
+    expect(cleared!.paidAt).toBeNull();
+    expect(cleared!.paidCheckNumber).toBeNull();
+    expect(cleared!.paidAmountCents).toBeNull();
+
+    const types = (
+      await db.select().from(events).where(eq(events.projectId, projectId))
+    ).map((e) => e.eventType);
+    expect(types).toEqual(
+      expect.arrayContaining(["contact.paid", "contact.payment_updated", "contact.unpaid"]),
+    );
+  });
+
+  it("amends the total cost of an approved project only, with an audit event", async () => {
+    const { projectId } = await makeProject();
+
+    // Still in review: refused, status and cost untouched.
+    const early = await amendProjectCost({ projectId, totalCostCents: 200000, adminId });
+    expect(early.ok).toBe(false);
+    if (!early.ok) expect(early.status).toBe(409);
+    let [p] = await db.select().from(projects).where(eq(projects.id, projectId));
+    expect(p!.totalCostCents).toBe(123456);
+
+    for (const stage of ["content_review", "campaign_review", "legal_review", "final_review"] as const) {
+      const r = await decideReview({ projectId, stage, decision: "advanced", checklist: {}, notes: null, adminId });
+      expect(r.ok).toBe(true);
+    }
+
+    const amended = await amendProjectCost({
+      projectId,
+      totalCostCents: 200000,
+      reason: "  Final invoice came in higher  ",
+      adminId,
+    });
+    expect(amended.ok).toBe(true);
+    if (amended.ok) expect(amended.value).toEqual({ from: 123456, to: 200000 });
+    [p] = await db.select().from(projects).where(eq(projects.id, projectId));
+    expect(p!.totalCostCents).toBe(200000);
+    expect(p!.status).toBe("approved");
+
+    const dash = await getDashboardRows();
+    expect(dash.find((r) => r.id === projectId)!.totalCostCents).toBe(200000);
+
+    const costEvents = (
+      await db.select().from(events).where(eq(events.projectId, projectId))
+    ).filter((e) => e.eventType === "cost.amended");
+    expect(costEvents).toHaveLength(1);
+    expect(costEvents[0]!.payload).toEqual({
+      from: 123456,
+      to: 200000,
+      reason: "Final invoice came in higher",
+    });
+
+    // No-op when the figure is unchanged: no second event.
+    const same = await amendProjectCost({ projectId, totalCostCents: 200000, adminId });
+    expect(same.ok).toBe(true);
+    const again = (
+      await db.select().from(events).where(eq(events.projectId, projectId))
+    ).filter((e) => e.eventType === "cost.amended");
+    expect(again).toHaveLength(1);
   });
 
   it("admin sets the campaign contact; resubmission never clobbers it", async () => {

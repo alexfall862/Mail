@@ -15,6 +15,8 @@ import {
   type EmailContent,
   type ProjectSummary,
 } from "@/lib/email/templates";
+import { threadHeaders } from "@/lib/email/threading";
+import { projectRef } from "@/lib/format";
 import { decryptVendorToken, encryptVendorToken } from "@/lib/token-crypto";
 
 beforeAll(() => {
@@ -23,6 +25,7 @@ beforeAll(() => {
 });
 
 const summary: ProjectSummary = {
+  ref: "A1B2C3",
   candidateSupported: "Jane Doe",
   officeLabel: "State House",
   mailDateFormatted: "Oct 12, 2026",
@@ -30,25 +33,25 @@ const summary: ProjectSummary = {
 const MAGIC = "https://mail.example/p/tok123";
 const ADMIN_URL = "https://mail.example/admin/projects/abc";
 
-function vendorTemplates(): EmailContent[] {
+function vendorTemplates(p: ProjectSummary = summary): EmailContent[] {
   return [
-    vendorConfirmation(summary, MAGIC),
-    vendorStagePassed(summary, "Content Review", "Legal Review", MAGIC),
-    vendorChangesRequested(summary, "Legal Review", "Fix the notes", MAGIC),
-    vendorApproved(summary, MAGIC),
-    vendorDenied(summary, "Because reasons", MAGIC),
-    vendorLinkRegenerated(summary, MAGIC),
-    campaignReviewRequest(summary, ["Print Co", "Mail Co"], MAGIC),
-    reviewerNotice(summary, "Legal Review", MAGIC),
+    vendorConfirmation(p, MAGIC),
+    vendorStagePassed(p, "Content Review", "Legal Review", MAGIC),
+    vendorChangesRequested(p, "Legal Review", "Fix the notes", MAGIC),
+    vendorApproved(p, MAGIC),
+    vendorDenied(p, "Because reasons", MAGIC),
+    vendorLinkRegenerated(p, MAGIC),
+    campaignReviewRequest(p, ["Print Co", "Mail Co"], MAGIC),
+    reviewerNotice(p, "Legal Review", MAGIC),
   ];
 }
 
-function adminTemplates(): EmailContent[] {
+function adminTemplates(p: ProjectSummary = summary): EmailContent[] {
   return [
-    adminNewSubmission(summary, ADMIN_URL),
-    adminResubmission(summary, 2, "Changed the back", ADMIN_URL),
-    adminReopened(summary, "Costs changed", "Alex", ADMIN_URL),
-    adminCampaignApproved(summary, "Sam Candidate", "sam@example.org", ADMIN_URL),
+    adminNewSubmission(p, ADMIN_URL),
+    adminResubmission(p, 2, "Changed the back", ADMIN_URL),
+    adminReopened(p, "Costs changed", "Alex", ADMIN_URL),
+    adminCampaignApproved(p, "Sam Candidate", "sam@example.org", ADMIN_URL),
   ];
 }
 
@@ -75,9 +78,29 @@ describe("email templates (§12)", () => {
     }
   });
 
-  it("every subject starts with the [KDP Mail] filter prefix", () => {
+  it("every subject opens with the [KDP Mail #REF] prefix", () => {
     for (const t of [...vendorTemplates(), ...adminTemplates()]) {
-      expect(t.subject.startsWith("[KDP Mail] "), t.template).toBe(true);
+      expect(t.subject.startsWith("[KDP Mail #A1B2C3] "), t.template).toBe(true);
+    }
+  });
+
+  // Production bug: three pieces for one candidate collapsed into a single
+  // mail chain, because every template produced a byte-identical subject and
+  // clients thread on the normalized subject. The ref makes them distinct.
+  it("two projects for the same candidate never share a subject", () => {
+    const other = { ...summary, ref: "D4E5F6" };
+    const mine = [...vendorTemplates(), ...adminTemplates()];
+    const theirs = [...vendorTemplates(other), ...adminTemplates(other)];
+    for (const [i, t] of mine.entries()) {
+      expect(theirs[i]!.subject, t.template).not.toBe(t.subject);
+    }
+    expect(new Set(theirs.map((t) => t.subject)).size).toBe(theirs.length);
+  });
+
+  it("every email carries its project ref in both body parts", () => {
+    for (const t of [...vendorTemplates(), ...adminTemplates()]) {
+      expect(t.text, t.template).toContain("Project ref #A1B2C3");
+      expect(t.html, t.template).toContain("Project ref #A1B2C3");
     }
   });
 
@@ -135,6 +158,51 @@ describe("email templates (§12)", () => {
     const t = vendorConfirmation(evil, MAGIC);
     expect(t.html).not.toContain("<script>");
     expect(t.html).toContain("&lt;script&gt;");
+  });
+});
+
+describe("project ref (one thread per project)", () => {
+  it("is a stable six-character handle derived from the project id", () => {
+    const id = "a1b2c3d4-0000-4000-8000-000000000000";
+    expect(projectRef(id)).toBe("A1B2C3");
+    expect(projectRef(id)).toBe(projectRef(id));
+  });
+
+  it("differs for two projects of the same candidate", () => {
+    expect(projectRef("11111111-0000-4000-8000-000000000000")).not.toBe(
+      projectRef("22222222-0000-4000-8000-000000000000"),
+    );
+  });
+});
+
+describe("thread headers (one thread per project)", () => {
+  const A = "11111111-0000-4000-8000-000000000000";
+  const B = "22222222-0000-4000-8000-000000000000";
+
+  it("anchors every email for a project to the same parent id", () => {
+    const h = threadHeaders(A)!;
+    expect(h["References"]).toBe(h["In-Reply-To"]);
+    expect(h["References"]).toBe(threadHeaders(A)!["References"]);
+    expect(h["References"]).toMatch(/^<project-[0-9a-f-]+@[^>]+>$/);
+  });
+
+  it("gives two projects different anchors", () => {
+    expect(threadHeaders(A)!["References"]).not.toBe(
+      threadHeaders(B)!["References"],
+    );
+  });
+
+  it("sends no threading headers when there is no project", () => {
+    expect(threadHeaders(null)).toBeUndefined();
+  });
+
+  it("takes the id domain from EMAIL_FROM", () => {
+    const prev = process.env.EMAIL_FROM;
+    process.env.EMAIL_FROM = "KDP Mail Program <mail@kdp.example.org>";
+    expect(threadHeaders(A)!["References"]).toBe(
+      `<project-${A}@kdp.example.org>`,
+    );
+    process.env.EMAIL_FROM = prev;
   });
 });
 
