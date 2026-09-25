@@ -130,6 +130,8 @@ create table contacts (
   paid_by_kdp    boolean not null default false,
   paid_at        timestamptz,                        -- null = unpaid
   paid_marked_by uuid references admins(id),
+  paid_check_number text,                            -- KDP check that covered this vendor (2026-09-25)
+  paid_amount_cents bigint,                          -- amount on that check for this vendor (optional)
   is_primary     boolean not null default false,     -- receives state-change emails
   unique (project_id, role)
 );
@@ -215,6 +217,10 @@ template + recipient for emails, etc.).
 - **Fully paid**: every contact with `paid_by_kdp = true` has non-null `paid_at`.
   Show as a badge (e.g. "2/3 paid") on the admin dashboard; include per-role paid dates
   and a `fully_paid` boolean in CSV export. Payment state is orthogonal to review status.
+- **Check register** (2026-09-25): every paid contact grouped by `paid_check_number`
+  (trimmed, case-insensitive), newest check first, with the vendors and projects it
+  covered and the sum of recorded `paid_amount_cents`; payments with no check number
+  form one trailing "no check # recorded" group so nothing drops out of reconciliation.
 
 ### Seed
 
@@ -397,8 +403,8 @@ and cleaned by the R2 lifecycle rule in the setup checklist).
 | Route | Purpose |
 |---|---|
 | `/admin/login` | Login |
-| `/admin` | Dashboard: table of projects, default sort by `mail_date` asc; columns: candidate, office, status, mail date, pieces, cost, paid badge; filter by status; **red flag on any non-terminal project with mail_date ≤ 10 days out** |
-| `/admin/projects/{id}` | Project detail: all fields, contacts w/ paid checkboxes (visible only where `paid_by_kdp`), artwork viewer w/ version compare, version history, full event timeline, review panel for the current stage (checklist + notes + Advance / Request changes / Deny), regenerate link, delete |
+| `/admin` | Dashboard: table of projects, default sort by `mail_date` asc; columns: candidate, office, status, mail date, pieces, cost, paid badge; filter by status; **red flag on any non-terminal project with mail_date ≤ 10 days out**. Approved rows expand (click the paid badge) into per-vendor payment controls — check #, amount, mark paid/unpaid — and a "Payments by check" register follows the approved table |
+| `/admin/projects/{id}` | Project detail: all fields, contacts w/ payment controls (check #, amount, paid/unpaid; visible only where `paid_by_kdp`), artwork viewer w/ version compare, version history, full event timeline, review panel for the current stage (checklist + notes + Advance / Request changes / Deny), regenerate link, delete |
 | `/admin/export` | CSV export (§11) |
 | `/admin/users` | Superuser only: admin management |
 | `/admin/settings/password` | Change own password |
@@ -453,7 +459,8 @@ No emails on delete.
 rows flagged `deleted=true` with their preserved columns): id, candidate, office,
 district_detail, description, citations_and_claims, pieces, total_cost (dollars), mail_date, status,
 status_changed_at, created_at, permit_number, post_office_location, then per role
-(designer/print/mail): org, contact, email, paid_by_kdp, paid_at — plus `fully_paid`.
+(designer/print/mail): org, contact, email, paid_by_kdp, paid_at, check_number, paid_amount
+(dollars) — plus `fully_paid`.
 Excel-safe encoding (UTF-8 BOM), proper quoting.
 
 ## 12. Emails (Resend)

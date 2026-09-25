@@ -381,13 +381,74 @@ export async function setCampaignContact(input: {
   });
 }
 
-/** Toggle a contact's paid state (visible only where paid_by_kdp). */
+/**
+ * Amend an approved project's total cost without touching its status: the
+ * final invoice often differs from the quote on the submission, and sending
+ * the piece back through review for a number change would be absurd.
+ * Approved only — while a project is still in review the vendor resubmits
+ * with the corrected quote, which keeps the reviewed artwork and cost in
+ * step. Audited as `cost.amended` with both figures and an optional reason.
+ */
+export async function amendProjectCost(input: {
+  projectId: string;
+  totalCostCents: number;
+  reason?: string;
+  adminId: string;
+}): Promise<OpResult<{ from: number; to: number }>> {
+  return db.transaction(async (tx) => {
+    const project = await lockProject(tx, input.projectId);
+    if (!project) return fail(404, "Project not found.");
+    if (project.status !== "approved") {
+      return fail(
+        409,
+        "Only approved projects can have their cost amended; while a project is in review the vendor resubmits with the corrected quote.",
+      );
+    }
+    const from = project.totalCostCents;
+    const to = input.totalCostCents;
+    if (from === to) return { ok: true as const, value: { from, to } };
+    const reason = input.reason?.trim() || null;
+    await tx
+      .update(projects)
+      .set({ totalCostCents: to, updatedAt: new Date() })
+      .where(eq(projects.id, project.id));
+    await logEvent(tx, {
+      projectId: project.id,
+      actor: "admin",
+      actorId: input.adminId,
+      eventType: "cost.amended",
+      payload: { from, to, reason },
+    });
+    return { ok: true as const, value: { from, to } };
+  });
+}
+
+/**
+ * Record, amend, or clear a KDP payment to a vendor (visible only where
+ * paid_by_kdp). Three cases:
+ *  - paid=false: clears paid_at and the check details (`contact.unpaid`).
+ *  - paid=true on an unpaid contact: stamps paid_at now, stores the check
+ *    details given (`contact.paid`).
+ *  - paid=true on an already-paid contact: keeps the original paid_at and
+ *    marker, updates only the check fields that were supplied
+ *    (`contact.payment_updated`) — so a check number can be attached to a
+ *    payment recorded before check tracking existed.
+ * `checkNumber`/`amountCents` undefined = leave unchanged; "" / null = clear.
+ */
 export async function setContactPaid(input: {
   projectId: string;
   contactId: string;
   paid: boolean;
+  checkNumber?: string;
+  amountCents?: number | null;
   adminId: string;
-}): Promise<OpResult<{ paidAt: Date | null }>> {
+}): Promise<
+  OpResult<{
+    paidAt: Date | null;
+    checkNumber: string | null;
+    amountCents: number | null;
+  }>
+> {
   return db.transaction(async (tx) => {
     const [contact] = await tx
       .select()
@@ -399,19 +460,76 @@ export async function setContactPaid(input: {
     if (!contact.paidByKdp) {
       return fail(400, "This vendor is not marked as needing KDP payment.");
     }
-    const paidAt = input.paid ? new Date() : null;
+
+    const trimmedCheck = input.checkNumber?.trim();
+    const checkNumber =
+      input.checkNumber === undefined
+        ? contact.paidCheckNumber
+        : trimmedCheck
+          ? trimmedCheck
+          : null;
+    const amountCents =
+      input.amountCents === undefined ? contact.paidAmountCents : input.amountCents;
+
+    if (!input.paid) {
+      await tx
+        .update(contactsTable)
+        .set({
+          paidAt: null,
+          paidMarkedBy: null,
+          paidCheckNumber: null,
+          paidAmountCents: null,
+        })
+        .where(eq(contactsTable.id, contact.id));
+      await logEvent(tx, {
+        projectId: input.projectId,
+        actor: "admin",
+        actorId: input.adminId,
+        eventType: "contact.unpaid",
+        payload: {
+          contactId: contact.id,
+          role: contact.role,
+          org: contact.orgName,
+          previousCheckNumber: contact.paidCheckNumber,
+        },
+      });
+      return {
+        ok: true as const,
+        value: { paidAt: null, checkNumber: null, amountCents: null },
+      };
+    }
+
+    const alreadyPaid = contact.paidAt !== null;
+    const paidAt = alreadyPaid ? contact.paidAt! : new Date();
     await tx
       .update(contactsTable)
-      .set({ paidAt, paidMarkedBy: input.paid ? input.adminId : null })
+      .set({
+        paidAt,
+        paidMarkedBy: alreadyPaid ? contact.paidMarkedBy : input.adminId,
+        paidCheckNumber: checkNumber,
+        paidAmountCents: amountCents,
+      })
       .where(eq(contactsTable.id, contact.id));
     await logEvent(tx, {
       projectId: input.projectId,
       actor: "admin",
       actorId: input.adminId,
-      eventType: input.paid ? "contact.paid" : "contact.unpaid",
-      payload: { contactId: contact.id, role: contact.role, org: contact.orgName },
+      eventType: alreadyPaid ? "contact.payment_updated" : "contact.paid",
+      payload: {
+        contactId: contact.id,
+        role: contact.role,
+        org: contact.orgName,
+        checkNumber,
+        amountCents,
+        ...(alreadyPaid
+          ? {
+              previousCheckNumber: contact.paidCheckNumber,
+              previousAmountCents: contact.paidAmountCents,
+            }
+          : {}),
+      },
     });
-    return { ok: true as const, value: { paidAt } };
+    return { ok: true as const, value: { paidAt, checkNumber, amountCents } };
   });
 }
 
@@ -484,6 +602,17 @@ export async function getAdminProjectView(
   };
 }
 
+/** One KDP-payable vendor on a project, as the dashboard needs it. Dates are
+ * ISO strings so the row can cross into client components unchanged. */
+export type DashboardPayment = {
+  contactId: string;
+  role: string;
+  orgName: string;
+  paidAt: string | null;
+  checkNumber: string | null;
+  amountCents: number | null;
+};
+
 export type DashboardRow = {
   id: string;
   candidateSupported: string;
@@ -495,6 +624,8 @@ export type DashboardRow = {
   totalCostCents: number;
   paidNeeded: number;
   paidDone: number;
+  /** Vendors with paid_by_kdp on this project (paidNeeded === payments.length). */
+  payments: DashboardPayment[];
 };
 
 export async function getDashboardRows(
@@ -506,25 +637,38 @@ export async function getDashboardRows(
     .where(statusFilter ? eq(projects.status, statusFilter) : undefined)
     .orderBy(asc(projects.mailDate)); // §8: default sort mail_date asc
   if (rows.length === 0) return [];
-  const allContacts = await db.select().from(contactsTable);
-  const byProject = new Map<string, { needed: number; done: number }>();
+  const allContacts = await db
+    .select()
+    .from(contactsTable)
+    .where(eq(contactsTable.paidByKdp, true))
+    .orderBy(asc(contactsTable.role));
+  const byProject = new Map<string, DashboardPayment[]>();
   for (const c of allContacts) {
-    if (!c.paidByKdp) continue;
-    const entry = byProject.get(c.projectId) ?? { needed: 0, done: 0 };
-    entry.needed += 1;
-    if (c.paidAt) entry.done += 1;
-    byProject.set(c.projectId, entry);
+    const list = byProject.get(c.projectId) ?? [];
+    list.push({
+      contactId: c.id,
+      role: c.role,
+      orgName: c.orgName,
+      paidAt: c.paidAt?.toISOString() ?? null,
+      checkNumber: c.paidCheckNumber,
+      amountCents: c.paidAmountCents,
+    });
+    byProject.set(c.projectId, list);
   }
-  return rows.map((p) => ({
-    id: p.id,
-    candidateSupported: p.candidateSupported,
-    office: p.office,
-    status: p.status,
-    changesRequestedFrom: p.changesRequestedFrom,
-    mailDate: p.mailDate,
-    pieceCount: p.pieceCount,
-    totalCostCents: p.totalCostCents,
-    paidNeeded: byProject.get(p.id)?.needed ?? 0,
-    paidDone: byProject.get(p.id)?.done ?? 0,
-  }));
+  return rows.map((p) => {
+    const payments = byProject.get(p.id) ?? [];
+    return {
+      id: p.id,
+      candidateSupported: p.candidateSupported,
+      office: p.office,
+      status: p.status,
+      changesRequestedFrom: p.changesRequestedFrom,
+      mailDate: p.mailDate,
+      pieceCount: p.pieceCount,
+      totalCostCents: p.totalCostCents,
+      paidNeeded: payments.length,
+      paidDone: payments.filter((c) => c.paidAt !== null).length,
+      payments,
+    };
+  });
 }

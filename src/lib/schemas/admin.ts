@@ -42,10 +42,34 @@ export const reviewDecisionSchema = z
   });
 export type ReviewDecisionInput = z.infer<typeof reviewDecisionSchema>;
 
+/** Longest check reference we accept; real check numbers are far shorter. */
+export const CHECK_NUMBER_MAX = 40;
+
 export const setPaidSchema = z.object({
   contactId: z.uuid(),
   paid: z.boolean(),
+  /** Check that covered this vendor. Omitted = leave as is (when already
+   * paid) or none (when newly marking paid); "" clears it. */
+  checkNumber: z.string().trim().max(CHECK_NUMBER_MAX).optional(),
+  /** Amount on the check for this vendor, in cents. Omitted = leave as is;
+   * null clears it. */
+  amountCents: z
+    .number()
+    .int()
+    .min(0)
+    .max(1_000_000_000) // $10M — a sanity bound, not a business rule
+    .nullable()
+    .optional(),
 });
+export type SetPaidInput = z.infer<typeof setPaidSchema>;
+
+/** Admin amendment of an approved project's total cost (final invoice differs
+ * from the quote). Cents; the same sanity bound as payment amounts. */
+export const amendCostSchema = z.object({
+  totalCostCents: z.number().int().min(0).max(1_000_000_000),
+  reason: z.string().trim().max(500).optional(),
+});
+export type AmendCostInput = z.infer<typeof amendCostSchema>;
 
 export const deleteProjectSchema = z.object({
   confirmName: z.string().min(1, "Type the candidate name to confirm."),

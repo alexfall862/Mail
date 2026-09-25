@@ -175,6 +175,11 @@ export const contacts = pgTable(
     paidByKdp: boolean("paid_by_kdp").notNull().default(false),
     paidAt: timestamp("paid_at", { withTimezone: true }), // null = unpaid
     paidMarkedBy: uuid("paid_marked_by").references(() => admins.id),
+    // Check reconciliation (2026-09-25): which KDP check covered this vendor
+    // and for how much. Both optional so the plain paid toggle keeps working;
+    // the dashboard prompts for them when recording a payment.
+    paidCheckNumber: text("paid_check_number"),
+    paidAmountCents: bigint("paid_amount_cents", { mode: "number" }),
     isPrimary: boolean("is_primary").notNull().default(false), // receives state-change emails
   },
   (table) => [unique().on(table.projectId, table.role)],
