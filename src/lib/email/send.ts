@@ -14,6 +14,7 @@ import { formatDate, projectRef } from "@/lib/format";
 import { officeLabel, type Office } from "@/lib/schemas/project";
 import { decryptVendorToken } from "@/lib/token-crypto";
 import { vendorLinkUrl } from "@/lib/tokens";
+import { dedupeRecipients, recipientLists } from "./recipients";
 import { threadHeaders } from "./threading";
 import type { EmailContent, ProjectSummary } from "./templates";
 
@@ -28,12 +29,14 @@ function resend(): Resend | null {
 /** Send one email and log email.sent / email.failed. Never throws. */
 export async function sendAndLog(
   projectId: string | null,
-  to: string[],
+  rawTo: string[],
   content: EmailContent,
   opts: { cc?: string[] } = {},
 ): Promise<void> {
+  // One message per inbox, even when the same person is listed under several
+  // vendor roles or appears in both To and CC (see recipients.ts).
+  const { to, cc } = recipientLists(rawTo, opts.cc);
   if (to.length === 0) return;
-  const cc = [...new Set(opts.cc ?? [])].filter((e) => !to.includes(e));
   const base = { template: content.template, recipients: to, cc };
   try {
     const api = resend();
@@ -79,7 +82,7 @@ export async function primaryContactEmails(projectId: string): Promise<string[]>
     .select({ email: contacts.email })
     .from(contacts)
     .where(and(eq(contacts.projectId, projectId), eq(contacts.isPrimary, true)));
-  return [...new Set(rows.map((r) => r.email))];
+  return dedupeRecipients(rows.map((r) => r.email));
 }
 
 export async function activeAdminEmails(): Promise<string[]> {
