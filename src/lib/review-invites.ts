@@ -126,6 +126,8 @@ export async function remindReviewInvite(input: {
   projectId: string;
   inviteId: string;
   adminId: string;
+  /** Sent as part of a multi-project reminder (timeline wording only). */
+  grouped?: boolean;
 }): Promise<InviteOpResult<ReminderTarget>> {
   const [row] = await db
     .select({ invite: reviewInvites, status: projects.status })
@@ -183,10 +185,75 @@ export async function remindReviewInvite(input: {
         role: invite.role,
         email: invite.recipientEmail,
         name: invite.recipientName,
+        grouped: input.grouped ?? false,
       },
     });
   });
   return { ok: true, value: { ...target, url: reviewInviteUrl(raw), sameLink: true } };
+}
+
+export type OutstandingReview = {
+  inviteId: string;
+  projectId: string;
+  candidateSupported: string;
+  office: string;
+  mailDate: string;
+  stage: ProjectStatus;
+  email: string;
+  name: string;
+  role: InviteRole;
+  sentAt: Date;
+  lastRemindedAt: Date | null;
+};
+
+/**
+ * Review links that are live (not replaced, project still at the invite's
+ * stage) and have no response for the current version, soonest mail date
+ * first. Optionally narrowed to one recipient.
+ */
+export async function listOutstandingReviews(
+  email?: string,
+): Promise<OutstandingReview[]> {
+  const rows = await db
+    .select({
+      inviteId: reviewInvites.id,
+      projectId: projects.id,
+      candidateSupported: projects.candidateSupported,
+      office: projects.office,
+      mailDate: projects.mailDate,
+      stage: reviewInvites.stage,
+      email: reviewInvites.recipientEmail,
+      name: reviewInvites.recipientName,
+      role: reviewInvites.role,
+      sentAt: reviewInvites.createdAt,
+      lastRemindedAt: reviewInvites.lastRemindedAt,
+    })
+    .from(reviewInvites)
+    .innerJoin(
+      projects,
+      and(
+        eq(projects.id, reviewInvites.projectId),
+        eq(projects.status, reviewInvites.stage),
+      ),
+    )
+    .leftJoin(
+      reviewResponses,
+      and(
+        eq(reviewResponses.inviteId, reviewInvites.id),
+        eq(reviewResponses.versionId, projects.currentVersionId),
+      ),
+    )
+    .where(
+      and(
+        isNull(reviewInvites.revokedAt),
+        isNull(reviewResponses.id),
+        email
+          ? eq(reviewInvites.recipientEmail, email.trim().toLowerCase())
+          : undefined,
+      ),
+    )
+    .orderBy(asc(projects.mailDate), asc(reviewInvites.createdAt));
+  return rows.map((r) => ({ ...r, role: r.role as InviteRole }));
 }
 
 export type ReviewInviteView = {

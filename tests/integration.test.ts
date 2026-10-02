@@ -67,6 +67,7 @@ import * as r2 from "@/lib/r2";
 import {
   createReviewInvites,
   getReviewInviteView,
+  listOutstandingReviews,
   listReviewFeedback,
   remindReviewInvite,
   submitReviewResponse,
@@ -1080,6 +1081,38 @@ describe("review invites & feedback (post-spec amendment 2026-08-17)", () => {
       ["blair@example.com", "approved"],
       ["drew@example.com", null],
     ]);
+  });
+
+  it("outstanding reviews span projects and drop answered or closed links", async () => {
+    const email = `grouped-${randomUUID()}@example.com`;
+    const a = await projectAtCampaignReview();
+    const b = await projectAtCampaignReview();
+    const c = await projectAtCampaignReview();
+    const send = (projectId: string) =>
+      createReviewInvites({
+        projectId,
+        stage: "campaign_review",
+        recipients: [{ email, name: "Grouped", role: "outside_reviewer" }],
+      });
+    await send(a);
+    const [answered] = await send(b);
+    await send(c);
+    await submitReviewResponse({
+      rawToken: rawFrom(answered!.url),
+      decision: "approved",
+      notes: null,
+    });
+    await decideReview({
+      projectId: c,
+      stage: "campaign_review",
+      decision: "advanced",
+      checklist: {},
+      notes: null,
+      adminId,
+    });
+
+    const outstanding = await listOutstandingReviews(email.toUpperCase());
+    expect(outstanding.map((o) => o.projectId)).toEqual([a]);
   });
 
   it("unknown tokens are rejected", async () => {

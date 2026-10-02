@@ -12,8 +12,13 @@ import {
   type PaymentSummary,
 } from "@/lib/payments";
 import { daysUntil, scheduleSlack, urgencyTier } from "@/lib/priority";
+import { listOutstandingReviews } from "@/lib/review-invites";
 import { ApprovedPaymentsTable } from "./approved-payments-table";
 import { CheckRegister } from "./check-register";
+import {
+  OutstandingReviewsTable,
+  type OutstandingReviewer,
+} from "./outstanding-reviews";
 import { officeLabel, type Office } from "@/lib/schemas/project";
 import {
   PROJECT_STATUSES,
@@ -55,6 +60,7 @@ export default async function AdminDashboardPage({
   const rows = statusFilter
     ? allRows.filter((r) => r.status === statusFilter)
     : allRows;
+  const outstandingReviewers = statusFilter ? [] : await loadOutstandingReviewers();
   const checkRegister = buildCheckRegister(allRows);
   const paymentSummary = summarizePayments(allRows);
 
@@ -133,6 +139,17 @@ export default async function AdminDashboardPage({
             <ProjectTable rows={active} showUrgency now={now} />
           )}
 
+          {outstandingReviewers.length > 0 && (
+            <>
+              <SectionHeading
+                title="Outstanding reviews by reviewer"
+                count={outstandingReviewers.length}
+                hint="one reminder per person covering everything they owe, using the links they already have"
+              />
+              <OutstandingReviewsTable reviewers={outstandingReviewers} />
+            </>
+          )}
+
           {approved.length > 0 && (
             <>
               <SectionHeading
@@ -161,6 +178,39 @@ export default async function AdminDashboardPage({
       )}
     </div>
   );
+}
+
+/** Live, unanswered review links grouped by recipient, longest list first. */
+async function loadOutstandingReviewers(): Promise<OutstandingReviewer[]> {
+  const byEmail = new Map<string, OutstandingReviewer & { lastAt: Date | null }>();
+  for (const o of await listOutstandingReviews()) {
+    const entry = byEmail.get(o.email) ?? {
+      email: o.email,
+      name: o.name,
+      items: [],
+      lastReminded: null,
+      lastAt: null,
+    };
+    entry.name ||= o.name;
+    entry.items.push({
+      inviteId: o.inviteId,
+      projectId: o.projectId,
+      candidateSupported: o.candidateSupported,
+      stageLabel: STATUS_LABELS[o.stage],
+      mailDate: o.mailDate,
+      campaignContact: o.role === "campaign_contact",
+    });
+    if (o.lastRemindedAt && (!entry.lastAt || o.lastRemindedAt > entry.lastAt)) {
+      entry.lastAt = o.lastRemindedAt;
+    }
+    byEmail.set(o.email, entry);
+  }
+  return [...byEmail.values()]
+    .sort((a, b) => b.items.length - a.items.length || a.email.localeCompare(b.email))
+    .map(({ lastAt, ...r }) => ({
+      ...r,
+      lastReminded: lastAt ? formatDateTime(lastAt) : null,
+    }));
 }
 
 function SectionHeading({

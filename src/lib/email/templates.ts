@@ -40,8 +40,9 @@ function esc(value: string): string {
 }
 
 function wrap(opts: {
-  /** The project this email belongs to — its ref anchors the footer. */
-  p: ProjectSummary;
+  /** The project this email belongs to — its ref anchors the footer.
+   * Null for emails spanning several projects. */
+  p: ProjectSummary | null;
   heading: string;
   bodyHtml: string;
   /** Vendor/reviewer emails: the recipient's private link for the footer. */
@@ -50,7 +51,7 @@ function wrap(opts: {
   linkLabel?: string;
 }): { html: string } {
   const label = opts.linkLabel ?? "Check status anytime";
-  const ref = `Project ref #${esc(opts.p.ref)}`;
+  const ref = opts.p ? `Project ref #${esc(opts.p.ref)}` : "KDP Mail Program";
   const footer = opts.magicLink
     ? `<p style="${styles.footer}">${ref}<br/>${esc(label)}: <a href="${esc(opts.magicLink)}">${esc(opts.magicLink)}</a></p>`
     : `<p style="${styles.footer}">${ref}<br/>KDP Mail Program internal notification.</p>`;
@@ -394,6 +395,77 @@ export function reviewReminder(
       magicLink: reviewLink,
       linkLabel: "Your private review page",
     }),
+    text,
+  };
+}
+
+/* ------- grouped review reminder: every outstanding review for one person */
+export type GroupedReminderItem = {
+  p: ProjectSummary;
+  stageLabel: string;
+  reviewLink: string;
+  campaignContact: boolean;
+  /** False when this link replaces one sent earlier. */
+  sameLink: boolean;
+};
+
+export function reviewReminderGrouped(
+  recipientName: string,
+  items: GroupedReminderItem[],
+): EmailContent {
+  const n = items.length;
+  const subject = `${SUBJECT_PREFIX}] Reminder: ${n} mail piece${n === 1 ? "" : "s"} awaiting your review`;
+  const greeting = recipientName ? `Hi ${recipientName},` : "Hello,";
+  const anyCampaign = items.some((i) => i.campaignContact);
+  const intro = `A quick reminder: we're still waiting on your review of the ${n === 1 ? "mail piece" : `${n} mail pieces`} below, soonest mail date first. Each has its own private review page.`;
+  const howTo =
+    "Approval or any issues you spot can be marked on each review page. Feedback recorded there is logged for the team automatically." +
+    (anyCampaign
+      ? " For pieces marked campaign sign-off, your approval moves the piece straight to the next step."
+      : "");
+  const itemNote = (i: GroupedReminderItem) =>
+    [
+      i.campaignContact ? "campaign sign-off" : "",
+      i.sameLink ? "" : "new link, replaces the earlier one",
+    ]
+      .filter(Boolean)
+      .join(" · ");
+
+  const itemsHtml = items
+    .map((i) => {
+      const note = itemNote(i);
+      return (
+        `<p style="${styles.p}"><strong>${esc(i.p.candidateSupported)}</strong> (${esc(i.p.officeLabel)})<br/>` +
+        `${esc(i.stageLabel)} · mailing ${esc(i.p.mailDateFormatted)} · ref #${esc(i.p.ref)}` +
+        (note ? `<br/><em>${esc(note)}</em>` : "") +
+        `<br/><a href="${esc(i.reviewLink)}">Open review page</a></p>`
+      );
+    })
+    .join("");
+  const bodyHtml =
+    `<p style="${styles.p}">${esc(greeting)}</p>` +
+    `<p style="${styles.p}">${esc(intro)}</p>` +
+    itemsHtml +
+    `<p style="${styles.p}">${esc(howTo)}</p>`;
+
+  const itemsText = items
+    .map((i) => {
+      const note = itemNote(i);
+      return (
+        `- ${i.p.candidateSupported} (${i.p.officeLabel})\n` +
+        `  ${i.stageLabel} · mailing ${i.p.mailDateFormatted} · ref #${i.p.ref}\n` +
+        (note ? `  (${note})\n` : "") +
+        `  Review page: ${i.reviewLink}`
+      );
+    })
+    .join("\n\n");
+  const text =
+    `${greeting}\n\n${intro}\n\n${itemsText}\n\n${howTo}\n\n--\nKDP Mail Program`;
+
+  return {
+    template: "review_reminder_grouped",
+    subject,
+    ...wrap({ p: null, heading: "Reminder: your reviews are needed", bodyHtml }),
     text,
   };
 }

@@ -7,6 +7,7 @@ import {
   campaignReviewRequest,
   reviewerNotice,
   reviewReminder,
+  reviewReminderGrouped,
   vendorApproved,
   vendorChangesRequested,
   vendorConfirmation,
@@ -161,6 +162,23 @@ describe("email templates (§12)", () => {
     });
     expect(fresh.text).toContain("replaces the one we sent earlier");
     expect(fresh.text).toContain("moves straight to the next step");
+  });
+
+  it("grouped reminder lists every piece with its own link", () => {
+    const other: ProjectSummary = { ...summary, ref: "B2C3D4", candidateSupported: "Sam Roe" };
+    const t = reviewReminderGrouped("Blair", [
+      { p: summary, stageLabel: "Legal Review", reviewLink: `${MAGIC}-1`, campaignContact: false, sameLink: true },
+      { p: other, stageLabel: "Campaign Review", reviewLink: `${MAGIC}-2`, campaignContact: true, sameLink: false },
+    ]);
+    expect(t.subject).toBe("[KDP Mail] Reminder: 2 mail pieces awaiting your review");
+    for (const part of [t.text, t.html]) {
+      expect(part).toContain("Hi Blair,");
+      expect(part).toContain(`${MAGIC}-1`);
+      expect(part).toContain(`${MAGIC}-2`);
+      expect(part).toContain("Sam Roe");
+      expect(part).toContain("#B2C3D4");
+    }
+    expect(t.text).toContain("campaign sign-off · new link, replaces the earlier one");
   });
 
   it("campaign sign-off notice names the contact and says the vendor wasn't emailed", () => {

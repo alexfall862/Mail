@@ -726,7 +726,9 @@ function describeEvent(
     case "review_response.submitted":
       return `Feedback from ${String(payload.name ?? "") || String(payload.email ?? "?")} at ${String(payload.stage ?? "?")}: ${payload.decision === "approved" ? "approved" : "flagged an issue"}`;
     case "review_invite.reminded":
-      return `Review reminder sent to ${String(payload.name ?? "") || String(payload.email ?? "?")}${who}`;
+      return `Review reminder sent to ${String(payload.name ?? "") || String(payload.email ?? "?")}${
+        payload.grouped ? " (grouped with their other outstanding reviews)" : ""
+      }${who}`;
     default:
       return type;
   }
