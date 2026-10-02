@@ -7,8 +7,9 @@
  * the project (admin team notified, vendor deliberately not).
  *
  * Token handling mirrors the vendor magic link: 32 random bytes base64url,
- * only sha256 stored. Unlike the vendor token there is no encrypted copy —
- * a re-send simply revokes the old invite and issues a fresh token.
+ * sha256 for lookup plus an AES-GCM copy (token-crypto.ts) so a reminder can
+ * re-send the same link. A full re-send revokes the old invite and issues a
+ * fresh token; a reminder leaves the original link working.
  */
 import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
@@ -26,6 +27,7 @@ import {
   type ProjectStatus,
   type ReviewStage,
 } from "./state-machine";
+import { decryptVendorToken, encryptVendorToken } from "./token-crypto";
 import { generateVendorToken, hashVendorToken } from "./tokens";
 
 export type InviteRole = "outside_reviewer" | "campaign_contact";
@@ -61,7 +63,8 @@ export async function createReviewInvites(input: {
   stage: ProjectStatus;
   recipients: Array<{ email: string; name: string; role: InviteRole }>;
 }): Promise<CreatedInvite[]> {
-  const created: Array<CreatedInvite & { hash: string }> = [];
+  const created: Array<CreatedInvite & { hash: string; encrypted: string }> =
+    [];
   for (const r of input.recipients) {
     const token = generateVendorToken();
     created.push({
@@ -70,6 +73,7 @@ export async function createReviewInvites(input: {
       role: r.role,
       url: reviewInviteUrl(token.raw),
       hash: token.hash,
+      encrypted: encryptVendorToken(token.raw),
     });
   }
   await db.transaction(async (tx) => {
@@ -92,10 +96,97 @@ export async function createReviewInvites(input: {
         recipientEmail: invite.email,
         recipientName: invite.name,
         tokenHash: invite.hash,
+        tokenEncrypted: invite.encrypted,
       });
     }
   });
-  return created.map(({ hash: _hash, ...invite }) => invite);
+  return created.map(({ hash: _hash, encrypted: _encrypted, ...invite }) => invite);
+}
+
+export type ReminderTarget = {
+  email: string;
+  name: string;
+  role: InviteRole;
+  stage: ProjectStatus;
+  /** The link to put in the reminder. */
+  url: string;
+  /** False when the original link couldn't be recovered (invite predates
+   * stored tokens) and a fresh one was issued in its place. */
+  sameLink: boolean;
+};
+
+/**
+ * Prepare a reminder for a live invite: recover its original link and record
+ * the reminder. Invites issued before tokens were stored encrypted can't be
+ * reproduced, so those fall back to a normal re-send (fresh link, old one
+ * revoked). Only open invites can be reminded — a link for a stage the
+ * project has left would just show "window closed".
+ */
+export async function remindReviewInvite(input: {
+  projectId: string;
+  inviteId: string;
+  adminId: string;
+}): Promise<InviteOpResult<ReminderTarget>> {
+  const [row] = await db
+    .select({ invite: reviewInvites, status: projects.status })
+    .from(reviewInvites)
+    .innerJoin(projects, eq(projects.id, reviewInvites.projectId))
+    .where(
+      and(
+        eq(reviewInvites.id, input.inviteId),
+        eq(reviewInvites.projectId, input.projectId),
+      ),
+    );
+  if (!row) return fail(404, "Review request not found.");
+  const { invite, status } = row;
+  if (invite.revokedAt !== null) {
+    return fail(409, "This review link was already replaced by a newer one.");
+  }
+  if (status !== invite.stage) {
+    return fail(
+      409,
+      "The project has moved past the stage this review was requested for.",
+    );
+  }
+
+  const target = {
+    email: invite.recipientEmail,
+    name: invite.recipientName,
+    role: invite.role as InviteRole,
+    stage: invite.stage,
+  };
+  const raw = decryptVendorToken(invite.tokenEncrypted);
+  if (!raw) {
+    const [fresh] = await createReviewInvites({
+      projectId: input.projectId,
+      stage: invite.stage,
+      recipients: [target],
+    });
+    return { ok: true, value: { ...target, url: fresh!.url, sameLink: false } };
+  }
+
+  await db.transaction(async (tx) => {
+    await tx
+      .update(reviewInvites)
+      .set({
+        reminderCount: sql`${reviewInvites.reminderCount} + 1`,
+        lastRemindedAt: new Date(),
+      })
+      .where(eq(reviewInvites.id, invite.id));
+    await logEvent(tx, {
+      projectId: input.projectId,
+      actor: "admin",
+      actorId: input.adminId,
+      eventType: "review_invite.reminded",
+      payload: {
+        stage: invite.stage,
+        role: invite.role,
+        email: invite.recipientEmail,
+        name: invite.recipientName,
+      },
+    });
+  });
+  return { ok: true, value: { ...target, url: reviewInviteUrl(raw), sameLink: true } };
 }
 
 export type ReviewInviteView = {

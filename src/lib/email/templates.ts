@@ -359,6 +359,45 @@ export function reviewerNotice(
   };
 }
 
+/* -------------- review reminder (admin-triggered, same link as before) */
+export function reviewReminder(
+  p: ProjectSummary,
+  stageLabel: string,
+  reviewLink: string,
+  opts: { campaignContact: boolean; sameLink: boolean },
+): EmailContent {
+  const subject = subj(p, `Reminder: ${stageLabel.toLowerCase()} needed for mail piece supporting ${p.candidateSupported}`);
+  const action = opts.campaignContact
+    ? "If everything looks right, approve it on your review page and the piece moves straight to the next step. If something is off, flag the issue there and the mail program team will follow up."
+    : "Approval or any issues you spot can be marked on your review page. Feedback recorded there is logged for the team automatically; replying to this email works too.";
+  const linkNote = opts.sameLink
+    ? "This is the same private link we sent earlier."
+    : "This link replaces the one we sent earlier.";
+  const bodyHtml =
+    `<p style="${styles.p}">A quick reminder: we're still waiting on your review of this mail piece.</p>` +
+    `<p style="${styles.p}"><strong>${esc(p.candidateSupported)}</strong><br/>${esc(p.officeLabel)}<br/>Scheduled mail date: ${esc(p.mailDateFormatted)}</p>` +
+    `<p style="${styles.p}">${esc(action)} ${esc(linkNote)}</p>` +
+    `<p style="${styles.p}"><a href="${esc(reviewLink)}" style="${styles.button}">Open your review page</a></p>`;
+  const text =
+    `A quick reminder: we're still waiting on your review of this mail piece.\n\n` +
+    `${p.candidateSupported}\n${p.officeLabel}\nScheduled mail date: ${p.mailDateFormatted}\n\n` +
+    `${action} ${linkNote}\n\n` +
+    `Open your review page: ${reviewLink}` +
+    footerText(p, reviewLink, "Your private review page");
+  return {
+    template: "review_reminder",
+    subject,
+    ...wrap({
+      p,
+      heading: "Reminder: your review is needed",
+      bodyHtml,
+      magicLink: reviewLink,
+      linkLabel: "Your private review page",
+    }),
+    text,
+  };
+}
+
 /* ------------------- campaign sign-off landed (internal, admin-only) */
 export function adminCampaignApproved(
   p: ProjectSummary,

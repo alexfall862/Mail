@@ -6,6 +6,7 @@ import {
   adminResubmission,
   campaignReviewRequest,
   reviewerNotice,
+  reviewReminder,
   vendorApproved,
   vendorChangesRequested,
   vendorConfirmation,
@@ -43,6 +44,7 @@ function vendorTemplates(p: ProjectSummary = summary): EmailContent[] {
     vendorLinkRegenerated(p, MAGIC),
     campaignReviewRequest(p, ["Print Co", "Mail Co"], MAGIC),
     reviewerNotice(p, "Legal Review", MAGIC),
+    reviewReminder(p, "Legal Review", MAGIC, { campaignContact: false, sameLink: true }),
   ];
 }
 
@@ -143,6 +145,22 @@ describe("email templates (§12)", () => {
     expect(t.text).toContain("awaiting legal review");
     expect(t.text).toContain("Jane Doe");
     expect(t.text).toContain("Oct 12, 2026");
+  });
+
+  it("review reminder carries the link and says whether it's the same one", () => {
+    const same = reviewReminder(summary, "Legal Review", MAGIC, {
+      campaignContact: false,
+      sameLink: true,
+    });
+    expect(same.subject).toContain("Reminder: legal review needed");
+    expect(same.text).toContain(`Open your review page: ${MAGIC}`);
+    expect(same.text).toContain("same private link we sent earlier");
+    const fresh = reviewReminder(summary, "Campaign Review", MAGIC, {
+      campaignContact: true,
+      sameLink: false,
+    });
+    expect(fresh.text).toContain("replaces the one we sent earlier");
+    expect(fresh.text).toContain("moves straight to the next step");
   });
 
   it("campaign sign-off notice names the contact and says the vendor wasn't emailed", () => {

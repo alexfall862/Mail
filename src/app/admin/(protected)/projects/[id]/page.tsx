@@ -30,6 +30,7 @@ import {
   ReopenButton,
   ReviewerNoticeButtons,
   ReviewPanel,
+  ReviewReminderButton,
 } from "./actions";
 import { VersionCompare, type ArtworkSet } from "./version-compare";
 import { VendorPaymentControl } from "@/components/vendor-payment";
@@ -272,6 +273,9 @@ export default async function AdminProjectPage({
             {feedback.map(({ invite, responses }) => {
               const live =
                 invite.revokedAt === null && status === invite.stage;
+              const answeredCurrent = responses.some(
+                (r) => r.versionId === project.currentVersionId,
+              );
               return (
                 <li
                   key={invite.id}
@@ -293,6 +297,21 @@ export default async function AdminProjectPage({
                       </span>
                     )}
                   </p>
+                  {invite.lastRemindedAt && (
+                    <p className="mt-0.5 text-xs text-gray-500">
+                      Reminded {invite.reminderCount}×, last{" "}
+                      {formatDateTime(invite.lastRemindedAt)}
+                    </p>
+                  )}
+                  {live && !answeredCurrent && (
+                    <div className="mt-2">
+                      <ReviewReminderButton
+                        projectId={project.id}
+                        inviteId={invite.id}
+                        recipient={invite.recipientName || invite.recipientEmail}
+                      />
+                    </div>
+                  )}
                   {responses.length === 0 ? (
                     <p className="mt-1 text-gray-500 italic">
                       {live ? "Awaiting response." : "No response recorded."}
@@ -706,6 +725,8 @@ function describeEvent(
       return `Wait overridden${who}: review resumed at ${String(payload.resumedStage ?? "?")}`;
     case "review_response.submitted":
       return `Feedback from ${String(payload.name ?? "") || String(payload.email ?? "?")} at ${String(payload.stage ?? "?")}: ${payload.decision === "approved" ? "approved" : "flagged an issue"}`;
+    case "review_invite.reminded":
+      return `Review reminder sent to ${String(payload.name ?? "") || String(payload.email ?? "?")}${who}`;
     default:
       return type;
   }

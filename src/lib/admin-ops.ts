@@ -3,7 +3,7 @@
  * a transaction holding SELECT … FOR UPDATE on the project row; the losing
  * side of a concurrent action gets a clean "already moved" error.
  */
-import { asc, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   admins,
@@ -12,6 +12,8 @@ import {
   events as eventsTable,
   files as filesTable,
   projects,
+  reviewInvites,
+  reviewResponses,
   stageReviews,
   submissionVersions,
 } from "@/db/schema";
@@ -626,6 +628,19 @@ export type DashboardRow = {
   paidDone: number;
   /** Vendors with paid_by_kdp on this project (paidNeeded === payments.length). */
   payments: DashboardPayment[];
+  /** Review links live at the project's current stage, oldest first. */
+  reviewRequests: DashboardReviewRequest[];
+};
+
+/** One outstanding-or-answered review link at a project's current stage. */
+export type DashboardReviewRequest = {
+  name: string;
+  email: string;
+  role: string;
+  /** Response for the current version; null = still waiting. */
+  decision: "approved" | "issues" | null;
+  sentAt: string;
+  lastRemindedAt: string | null;
 };
 
 export async function getDashboardRows(
@@ -655,6 +670,49 @@ export async function getDashboardRows(
     });
     byProject.set(c.projectId, list);
   }
+  // Live invites only: not superseded, and for the stage the project sits at
+  // now (links for other stages are closed). The response must be for the
+  // current version — a resubmission puts everyone back to "waiting".
+  const inviteRows = await db
+    .select({
+      projectId: reviewInvites.projectId,
+      name: reviewInvites.recipientName,
+      email: reviewInvites.recipientEmail,
+      role: reviewInvites.role,
+      decision: reviewResponses.decision,
+      sentAt: reviewInvites.createdAt,
+      lastRemindedAt: reviewInvites.lastRemindedAt,
+    })
+    .from(reviewInvites)
+    .innerJoin(
+      projects,
+      and(
+        eq(projects.id, reviewInvites.projectId),
+        eq(projects.status, reviewInvites.stage),
+      ),
+    )
+    .leftJoin(
+      reviewResponses,
+      and(
+        eq(reviewResponses.inviteId, reviewInvites.id),
+        eq(reviewResponses.versionId, projects.currentVersionId),
+      ),
+    )
+    .where(isNull(reviewInvites.revokedAt))
+    .orderBy(asc(reviewInvites.createdAt));
+  const requestsByProject = new Map<string, DashboardReviewRequest[]>();
+  for (const r of inviteRows) {
+    const list = requestsByProject.get(r.projectId) ?? [];
+    list.push({
+      name: r.name,
+      email: r.email,
+      role: r.role,
+      decision: r.decision as DashboardReviewRequest["decision"],
+      sentAt: r.sentAt.toISOString(),
+      lastRemindedAt: r.lastRemindedAt?.toISOString() ?? null,
+    });
+    requestsByProject.set(r.projectId, list);
+  }
   return rows.map((p) => {
     const payments = byProject.get(p.id) ?? [];
     return {
@@ -669,6 +727,7 @@ export async function getDashboardRows(
       paidNeeded: payments.length,
       paidDone: payments.filter((c) => c.paidAt !== null).length,
       payments,
+      reviewRequests: requestsByProject.get(p.id) ?? [],
     };
   });
 }

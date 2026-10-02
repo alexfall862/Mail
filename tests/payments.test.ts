@@ -35,6 +35,7 @@ function row(
     paidNeeded: payments.length,
     paidDone: payments.filter((p) => p.paidAt).length,
     payments,
+    reviewRequests: [],
     ...over,
   };
 }

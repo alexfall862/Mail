@@ -728,6 +728,57 @@ export function CampaignReviewEmailButton({
   );
 }
 
+/** Nudge one outstanding reviewer with the link they already have. */
+export function ReviewReminderButton({
+  projectId,
+  inviteId,
+  recipient,
+}: {
+  projectId: string;
+  inviteId: string;
+  recipient: string;
+}) {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  return (
+    <span className="inline-flex items-center gap-2">
+      <button
+        type="button"
+        disabled={busy}
+        onClick={async () => {
+          if (
+            !window.confirm(
+              `Email ${recipient} a reminder? It re-sends their existing review link; the original email keeps working.`,
+            )
+          )
+            return;
+          setBusy(true);
+          setMessage(null);
+          const result = await postJson(
+            `/api/admin/projects/${projectId}/review-invites/${inviteId}/remind`,
+            {},
+          );
+          setBusy(false);
+          setMessage(
+            !result.ok
+              ? (result.message ?? "Send failed.")
+              : result.data?.sameLink === false
+                ? "Reminder sent. This invite predates saved links, so a fresh link was issued and the old one no longer works."
+                : "Reminder sent.",
+          );
+          router.refresh();
+        }}
+        className="rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+      >
+        {busy ? "Sending…" : "Send reminder"}
+      </button>
+      {message && <span className="text-xs text-gray-600">{message}</span>}
+    </span>
+  );
+}
+
 export function RegenerateLinkButton({ projectId }: { projectId: string }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);

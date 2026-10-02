@@ -284,10 +284,15 @@ export const reviewInvites = pgTable(
     recipientEmail: text("recipient_email").notNull(),
     recipientName: text("recipient_name").notNull().default(""),
     tokenHash: text("token_hash").notNull().unique(), // sha256(raw)
+    // AES-GCM copy of the raw token (token-crypto.ts) so a reminder can
+    // re-send the same link. Null on invites issued before reminders existed.
+    tokenEncrypted: text("token_encrypted"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
     revokedAt: timestamp("revoked_at", { withTimezone: true }), // superseded by a re-send
+    reminderCount: integer("reminder_count").notNull().default(0),
+    lastRemindedAt: timestamp("last_reminded_at", { withTimezone: true }),
   },
   (table) => [index("idx_review_invites_project").on(table.projectId)],
 );

@@ -47,6 +47,7 @@ import {
   events,
   files,
   projects,
+  reviewInvites,
   stageReviews,
   submissionVersions,
 } from "@/db/schema";
@@ -67,6 +68,7 @@ import {
   createReviewInvites,
   getReviewInviteView,
   listReviewFeedback,
+  remindReviewInvite,
   submitReviewResponse,
 } from "@/lib/review-invites";
 import type { FileClaim, SubmitRequest } from "@/lib/schemas/project";
@@ -947,6 +949,137 @@ describe("review invites & feedback (post-spec amendment 2026-08-17)", () => {
     const feedback = await listReviewFeedback(projectId);
     expect(feedback[0]!.responses).toHaveLength(1);
     expect(feedback[0]!.responses[0]!.decision).toBe("approved");
+  });
+
+  it("a reminder re-sends the same link and leaves it working", async () => {
+    const projectId = await projectAtCampaignReview();
+    const [invite] = await createReviewInvites({
+      projectId,
+      stage: "campaign_review",
+      recipients: [
+        { email: "blair@example.com", name: "Blair", role: "outside_reviewer" },
+      ],
+    });
+    const [row] = await db
+      .select()
+      .from(reviewInvites)
+      .where(eq(reviewInvites.tokenHash, hashVendorToken(rawFrom(invite!.url))));
+
+    const reminded = await remindReviewInvite({ projectId, inviteId: row!.id, adminId });
+    expect(reminded.ok).toBe(true);
+    if (reminded.ok) {
+      expect(reminded.value.sameLink).toBe(true);
+      expect(reminded.value.url).toBe(invite!.url);
+    }
+    const [after] = await db.select().from(reviewInvites).where(eq(reviewInvites.id, row!.id));
+    expect(after!.revokedAt).toBeNull();
+    expect(after!.reminderCount).toBe(1);
+    expect(after!.lastRemindedAt).not.toBeNull();
+
+    const response = await submitReviewResponse({
+      rawToken: rawFrom(invite!.url),
+      decision: "approved",
+      notes: null,
+    });
+    expect(response.ok).toBe(true);
+  });
+
+  it("a reminder for a pre-reminder invite falls back to a fresh link", async () => {
+    const projectId = await projectAtCampaignReview();
+    const [invite] = await createReviewInvites({
+      projectId,
+      stage: "campaign_review",
+      recipients: [
+        { email: "blair@example.com", name: "Blair", role: "outside_reviewer" },
+      ],
+    });
+    const hash = hashVendorToken(rawFrom(invite!.url));
+    await db
+      .update(reviewInvites)
+      .set({ tokenEncrypted: null })
+      .where(eq(reviewInvites.tokenHash, hash));
+    const [row] = await db.select().from(reviewInvites).where(eq(reviewInvites.tokenHash, hash));
+
+    const reminded = await remindReviewInvite({ projectId, inviteId: row!.id, adminId });
+    expect(reminded.ok).toBe(true);
+    if (reminded.ok) {
+      expect(reminded.value.sameLink).toBe(false);
+      expect(reminded.value.url).not.toBe(invite!.url);
+    }
+    const stale = await getReviewInviteView(rawFrom(invite!.url));
+    expect(stale!.open).toBe(false);
+  });
+
+  it("reminders are refused once the review window has closed", async () => {
+    const projectId = await projectAtCampaignReview();
+    const [invite] = await createReviewInvites({
+      projectId,
+      stage: "campaign_review",
+      recipients: [
+        { email: "blair@example.com", name: "Blair", role: "outside_reviewer" },
+      ],
+    });
+    const [row] = await db
+      .select()
+      .from(reviewInvites)
+      .where(eq(reviewInvites.tokenHash, hashVendorToken(rawFrom(invite!.url))));
+    await decideReview({
+      projectId,
+      stage: "campaign_review",
+      decision: "advanced",
+      checklist: {},
+      notes: null,
+      adminId,
+    });
+    const reminded = await remindReviewInvite({ projectId, inviteId: row!.id, adminId });
+    expect(reminded.ok).toBe(false);
+    if (!reminded.ok) expect(reminded.status).toBe(409);
+  });
+
+  it("dashboard rows list live review requests with current-version decisions", async () => {
+    const projectId = await projectAtCampaignReview();
+    const [blair, drew] = await createReviewInvites({
+      projectId,
+      stage: "campaign_review",
+      recipients: [
+        { email: "blair@example.com", name: "Blair", role: "outside_reviewer" },
+        { email: "drew@example.com", name: "Drew", role: "outside_reviewer" },
+      ],
+    });
+    // A content-stage invite is closed now and must not show.
+    await createReviewInvites({
+      projectId,
+      stage: "content_review",
+      recipients: [
+        { email: "old@example.com", name: "Old", role: "outside_reviewer" },
+      ],
+    });
+    await submitReviewResponse({
+      rawToken: rawFrom(blair!.url),
+      decision: "approved",
+      notes: null,
+    });
+    await submitReviewResponse({
+      rawToken: rawFrom(drew!.url),
+      decision: "issues",
+      notes: "Typo",
+    });
+    // Re-sending to Drew supersedes the old invite; the new one is unanswered.
+    await createReviewInvites({
+      projectId,
+      stage: "campaign_review",
+      recipients: [
+        { email: "drew@example.com", name: "Drew", role: "outside_reviewer" },
+      ],
+    });
+
+    const row = (await getDashboardRows()).find((r) => r.id === projectId)!;
+    expect(
+      row.reviewRequests.map((r) => [r.email, r.decision]),
+    ).toEqual([
+      ["blair@example.com", "approved"],
+      ["drew@example.com", null],
+    ]);
   });
 
   it("unknown tokens are rejected", async () => {

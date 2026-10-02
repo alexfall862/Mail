@@ -1,6 +1,10 @@
 import Link from "next/link";
-import { getDashboardRows, type DashboardRow } from "@/lib/admin-ops";
-import { formatDate, formatMoney } from "@/lib/format";
+import {
+  getDashboardRows,
+  type DashboardReviewRequest,
+  type DashboardRow,
+} from "@/lib/admin-ops";
+import { formatDate, formatDateTime, formatMoney } from "@/lib/format";
 import {
   buildCheckRegister,
   summarizePayments,
@@ -239,6 +243,7 @@ function ProjectTable({
             <th className="px-4 py-3">Candidate</th>
             <th className="px-4 py-3">Office</th>
             <th className="px-4 py-3">Status</th>
+            {showUrgency && <th className="px-4 py-3">Reviewers</th>}
             <th className="px-4 py-3">Mail date</th>
             {showUrgency && <th className="px-4 py-3">Days left</th>}
             <th className="px-4 py-3 text-right">Pieces</th>
@@ -267,6 +272,11 @@ function ProjectTable({
                   {STATUS_LABELS[row.status]}
                 </span>
               </td>
+              {showUrgency && (
+                <td className="px-4 py-3">
+                  <ReviewRequestBoxes requests={row.reviewRequests} />
+                </td>
+              )}
               <td className="px-4 py-3 whitespace-nowrap">
                 {formatDate(row.mailDate)}
               </td>
@@ -301,6 +311,62 @@ function ProjectTable({
         </tbody>
       </table>
     </div>
+  );
+}
+
+/** One box per review link out at the current stage: gray = waiting,
+ * green = approved, amber = flagged an issue. Hover for who/when. */
+function ReviewRequestBoxes({
+  requests,
+}: {
+  requests: DashboardReviewRequest[];
+}) {
+  if (requests.length === 0) return <span className="text-gray-400">-</span>;
+  return (
+    <span className="flex flex-wrap gap-1">
+      {requests.map((r) => {
+        const who = r.name ? `${r.name} (${r.email})` : r.email;
+        const state =
+          r.decision === "approved"
+            ? "approved"
+            : r.decision === "issues"
+              ? "flagged an issue"
+              : "awaiting response";
+        const reminded = r.lastRemindedAt
+          ? ` · reminded ${formatDateTime(new Date(r.lastRemindedAt))}`
+          : "";
+        const title = `${who}${r.role === "campaign_contact" ? " · campaign contact" : ""}: ${state} · sent ${formatDateTime(new Date(r.sentAt))}${reminded}`;
+        const style =
+          r.decision === "approved"
+            ? "border-green-600 bg-green-600 text-white"
+            : r.decision === "issues"
+              ? "border-amber-500 bg-amber-500 text-white"
+              : "border-gray-300 bg-gray-100 text-gray-400";
+        return (
+          <span
+            key={r.email}
+            title={title}
+            aria-label={title}
+            className={`inline-flex h-5 w-5 items-center justify-center rounded border text-xs font-bold ${style}`}
+          >
+            {r.decision === "issues" ? (
+              "!"
+            ) : (
+              <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" aria-hidden="true">
+                <path
+                  d="M3.5 8.5l3 3 6-7"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            )}
+          </span>
+        );
+      })}
+    </span>
   );
 }
 
